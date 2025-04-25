@@ -1,0 +1,6 @@
+monitor:
+  - url: "http://example.com"
+    refresh_interval: 60
+    timeout: 5
+    follow_redirects: true
+    skip_ssl_verification: false
