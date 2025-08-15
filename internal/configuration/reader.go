@@ -2,8 +2,11 @@ package configuration
 
 import (
 	"fmt"
+	"log"
+	"regexp"
+	"strconv"
 	"time"
-	"uptime-go/internal/net/config"
+	"uptime-go/internal/models"
 
 	"github.com/spf13/viper"
 )
@@ -25,9 +28,6 @@ func (cr *ConfigReader) ReadConfig(filePath string) error {
 	// Set the file type
 	cr.viper.SetConfigType("yaml")
 
-	// Set the environment variable prefix
-	cr.setDefaults()
-
 	if err := cr.viper.ReadInConfig(); err != nil {
 		return err
 	}
@@ -35,66 +35,102 @@ func (cr *ConfigReader) ReadConfig(filePath string) error {
 	return nil
 }
 
-func (c *ConfigReader) setDefaults() {
-	c.viper.SetDefault("timeout", "5s")
-	c.viper.SetDefault("refresh_interval", "10")
-	c.viper.SetDefault("follow_redirects", true)
-	c.viper.SetDefault("skip_ssl", false)
-}
-
-func (c *ConfigReader) GetUptimeConfig() ([]*config.NetworkConfig, error) {
-	var configList []*config.NetworkConfig
+func (c *ConfigReader) ParseConfig() ([]*models.Monitor, error) {
+	var configList []*models.Monitor
 
 	// Get the monitor configurations
 	monitors := c.viper.Get("monitor")
-	monitorsList, ok := monitors.([]interface{})
+	monitorsList, ok := monitors.([]any)
 	if !ok {
 		return nil, fmt.Errorf("invalid monitor configuration format")
 	}
 
 	for _, m := range monitorsList {
-		monitor, ok := m.(map[string]interface{})
+		monitor, ok := m.(map[string]any)
 		if !ok {
 			continue
 		}
 
-		config := &config.NetworkConfig{}
+		config := &models.Monitor{}
 
 		// Get URL
 		if url, ok := monitor["url"].(string); ok {
 			config.URL = url
+		} else {
+			log.Printf("invalid url: %s", url)
+			continue
+		}
+
+		// Get enabled
+		if enabled, ok := monitor["enabled"].(bool); ok {
+			config.Enabled = enabled
+		} else {
+			config.Enabled = true
 		}
 
 		// Get refresh interval
-		if refreshInterval, ok := monitor["refresh_interval"].(int); ok {
-			config.RefreshInterval = time.Duration(refreshInterval) * time.Second
+		if refreshInterval, ok := monitor["interval"].(string); ok {
+			config.Interval = ParseDuration(refreshInterval, "1m")
 		} else {
-			config.RefreshInterval = 60 * time.Second // Default refresh interval
+			config.Interval = 60 * time.Second // Default refresh interval
 		}
 
 		// Get timeout
-		if timeout, ok := monitor["timeout"].(int); ok {
-			config.Timeout = time.Duration(timeout) * time.Second
+		if timeout, ok := monitor["response_time_threshold"].(string); ok {
+			config.ResponseTimeThreshold = ParseDuration(timeout, "5s")
 		} else {
-			config.Timeout = 5 * time.Second // Default timeout
-		}
-
-		// Get follow redirects
-		if followRedirects, ok := monitor["follow_redirects"].(bool); ok {
-			config.FollowRedirects = followRedirects
-		} else {
-			config.FollowRedirects = true // Default follow redirects
+			config.ResponseTimeThreshold = 5 * time.Second // Default timeout
 		}
 
 		// Get skip SSL verification
-		if skipSSL, ok := monitor["skip_ssl_verification"].(bool); ok {
-			config.SkipSSL = skipSSL
+		if skipSSL, ok := monitor["certificate_monitoring"].(bool); ok {
+			config.CertificateMonitoring = skipSSL
 		} else {
-			config.SkipSSL = false // Default skip SSL
+			config.CertificateMonitoring = false // Default skip SSL
+		}
+
+		// Get SSL expired before
+		if sslExpired, ok := monitor["certificate_expired_before"].(string); ok {
+			expired := ParseDuration(sslExpired, "1M")
+			config.CertificateExpiredBefore = &expired
+		} else {
+			expired := ParseDuration(sslExpired, "1M")
+			config.CertificateExpiredBefore = &expired
 		}
 
 		configList = append(configList, config)
 	}
 
 	return configList, nil
+}
+
+func ParseDuration(input string, defaultValue string) time.Duration {
+	re := regexp.MustCompile(`(\d+)([smhdM])`)
+	matches := re.FindAllStringSubmatch(input, -1)
+
+	if len(matches) == 0 {
+		log.Printf("invalid duration string: %s", input)
+		return ParseDuration(defaultValue, "1s")
+	}
+
+	var total time.Duration
+	for _, match := range matches {
+		value, _ := strconv.Atoi(match[1])
+		unit := match[2]
+
+		switch unit {
+		case "s":
+			total += time.Duration(value) * time.Second
+		case "m":
+			total += time.Duration(value) * time.Minute
+		case "h":
+			total += time.Duration(value) * time.Hour
+		case "d":
+			total += time.Duration(value) * 24 * time.Hour
+		case "M":
+			total += time.Duration(value) * 24 * time.Hour * 30
+		}
+	}
+
+	return total
 }

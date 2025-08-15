@@ -1,6 +1,9 @@
+# interval, response_time_threshold, certificate_expired_before: can be s(second)/m(minutes)/h(hour)/d(day)/M(month)
+
 monitor:
   - url: "http://example.com"
-    refresh_interval: 60
-    timeout: 5
-    follow_redirects: true
-    skip_ssl_verification: false
+    enabled: true
+    interval: 5m
+    response_time_threshold: 5s
+    certificate_monitoring: true
+    certificate_expired_before: 1M

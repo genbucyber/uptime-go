@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime"
 	"testing"
 	"time"
 
+	"uptime-go/internal/configuration"
+	"uptime-go/internal/models"
 	"uptime-go/internal/monitor"
-	"uptime-go/internal/net/config"
+	"uptime-go/internal/net/database"
 )
 
 // memStats holds memory statistics
@@ -83,15 +86,16 @@ func createTestServer(statusCode int, responseDelay time.Duration) *httptest.Ser
 }
 
 // createTestConfigs creates test NetworkConfig entries
-func createTestConfigs(count int, server *httptest.Server) []*config.NetworkConfig {
-	configs := make([]*config.NetworkConfig, count)
+func createTestConfigs(count int, server *httptest.Server) []*models.Monitor {
+	configs := make([]*models.Monitor, count)
 	for i := 0; i < count; i++ {
-		configs[i] = &config.NetworkConfig{
-			URL:             server.URL,
-			RefreshInterval: 1 * time.Second,
-			Timeout:         500 * time.Millisecond,
-			FollowRedirects: true,
-			SkipSSL:         false,
+		configs[i] = &models.Monitor{
+			URL:                   server.URL,
+			Enabled:               true,
+			Interval:              1 * time.Second,
+			ResponseTimeThreshold: 500 * time.Millisecond,
+			CertificateMonitoring: false,
+			// FollowRedirects: true,
 		}
 	}
 	return configs
@@ -110,8 +114,17 @@ func benchmarkMonitor(b *testing.B, websiteCount int) {
 	beforeStats := getMemStats()
 	startTime := time.Now()
 
+	configuration.Config.DBFile = "./uptime.db"
+
+	// Create database connection
+	db, err := database.InitializeDatabase()
+	if err != nil {
+		fmt.Printf("failed to initialize database: %v", err)
+		os.Exit(1)
+	}
+
 	// Create monitor
-	uptimeMonitor, err := monitor.NewUptimeMonitor(configs)
+	uptimeMonitor, err := monitor.NewUptimeMonitor(db, configs)
 	if err != nil {
 		b.Fatalf("Failed to create monitor: %v", err)
 	}
