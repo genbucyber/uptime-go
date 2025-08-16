@@ -3,17 +3,15 @@ package database
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
-
-	"uptime-go/internal/net/config"
+	"uptime-go/internal/configuration"
+	"uptime-go/internal/models"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-)
-
-const (
-	DBPath = "/var/uptime-go/db/uptime.db"
+	"gorm.io/gorm/clause"
 )
 
 type Database struct {
@@ -21,9 +19,11 @@ type Database struct {
 	mutex sync.RWMutex
 }
 
-func InitializeDatabase() (*gorm.DB, error) {
+func InitializeDatabase() (*Database, error) {
+	DBPath := configuration.Config.DBFile
+
 	// Create the directory if it doesn't exist
-	if err := os.MkdirAll("/var/uptime-go/db", 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(DBPath), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -37,7 +37,7 @@ func InitializeDatabase() (*gorm.DB, error) {
 	}
 
 	// Open the database connection using GORM and SQLite with connection pool configuration
-	db, err := gorm.Open(sqlite.Open(DBPath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(DBPath+"?_journal_mode=WAL"), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -62,22 +62,72 @@ func InitializeDatabase() (*gorm.DB, error) {
 	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
 
 	// Migrate the schema
-	if err := db.AutoMigrate(&config.CheckResults{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.Monitor{},
+		&models.MonitorHistory{},
+		&models.Incident{},
+	); err != nil {
 		return nil, fmt.Errorf("failed to migrate database schema: %w", err)
 	}
 
-	return db, nil
+	return &Database{DB: db}, nil
 }
 
-func (db *Database) SaveResults(results *config.CheckResults) error {
+func InitializeTestDatabase() (*Database, error) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		// NamingStrategy: schema.NamingStrategy{
+		// 	TablePrefix: "test_" + fmt.Sprint(time.Now().Unix()) + "_",
+		// },
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	if err := db.AutoMigrate(
+		&models.Monitor{},
+		&models.MonitorHistory{},
+		&models.Incident{},
+	); err != nil {
+		return nil, fmt.Errorf("failed to migrate database schema: %w", err)
+	}
+
+	return &Database{DB: db}, nil
+}
+
+func (db *Database) UpsertRecord(record any, column string) error {
+	// Create record if not exists else update
+
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
-	err := db.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(results).Error; err != nil {
-			return fmt.Errorf("failed to save results: %w", err)
+	return db.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: column}},
+			UpdateAll: true,
+		}).Create(record).Error; err != nil {
+			return fmt.Errorf("failed to save record: %w", err)
 		}
 		return nil
 	})
-	return err
+}
+
+func (db *Database) Upsert(record any) error {
+	return db.UpsertRecord(record, "id")
+}
+
+func (db *Database) GetLastIncident(url string, incidentType models.IncidentType) *models.Incident {
+	var incident models.Incident
+
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
+	db.DB.Joins("Monitor").
+		Select("incidents.*").
+		Where("Monitor.url = ? AND incidents.type = ? AND incidents.solved_at IS NULL", url, incidentType).
+		Order("incidents.created_at DESC").
+		Limit(1).
+		Find(&incident)
+
+	return &incident
 }

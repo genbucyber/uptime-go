@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"time"
-	"uptime-go/internal/net/config"
 )
 
 type NetworkConfig struct {
@@ -17,7 +16,17 @@ type NetworkConfig struct {
 	SkipSSL         bool
 }
 
-func (nc *NetworkConfig) CheckWebsite() (*config.CheckResults, error) {
+type CheckResults struct {
+	URL            string
+	LastCheck      time.Time
+	ResponseTime   time.Duration
+	IsUp           bool
+	StatusCode     int
+	ErrorMessage   string
+	SSLExpiredDate *time.Time
+}
+
+func (nc *NetworkConfig) CheckWebsite() (*CheckResults, error) {
 	client := &http.Client{
 		Timeout: nc.Timeout,
 
@@ -26,11 +35,12 @@ func (nc *NetworkConfig) CheckWebsite() (*config.CheckResults, error) {
 		},
 	}
 
-	if !nc.FollowRedirects {
-		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
-	}
+	// TODO: later
+	// if !nc.FollowRedirects {
+	// 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+	// 		return http.ErrUseLastResponse
+	// 	}
+	// }
 
 	req, err := http.NewRequest(http.MethodGet, nc.URL, nil)
 	if err != nil {
@@ -48,14 +58,23 @@ func (nc *NetworkConfig) CheckWebsite() (*config.CheckResults, error) {
 	success := resp.StatusCode >= 200 && resp.StatusCode < 300
 	isUp := success
 
-	return &config.CheckResults{
+	result := &CheckResults{
 		URL:          nc.URL,
 		LastCheck:    time.Now(),
 		ResponseTime: responseTime,
 		IsUp:         isUp,
 		StatusCode:   resp.StatusCode,
 		ErrorMessage: "",
-	}, nil
+	}
+
+	if tls := resp.TLS; tls != nil &&
+		tls.PeerCertificates != nil &&
+		len(tls.PeerCertificates) != 0 {
+		result.SSLExpiredDate = &tls.PeerCertificates[0].NotAfter
+		// fmt.Printf("TLS: %v\n", time.Until(resp.TLS.PeerCertificates[0].NotAfter))
+	}
+
+	return result, nil
 }
 
 func isIPAddress(host string) bool {
