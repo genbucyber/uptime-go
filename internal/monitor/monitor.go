@@ -206,6 +206,7 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 	if isSSLExpiringSoon && lastSSLIncident.CreatedAt.IsZero() {
 		log.Printf("%s - Please update SSL Certificate - [%s]", monitor.URL, result.SSLExpiredDate)
 		m.db.DB.Create(&models.Incident{
+			ID:          helper.GenerateRandomID(),
 			MonitorID:   monitor.ID,
 			Type:        models.SSLExpired,
 			Description: fmt.Sprintf("SSL will be expired on %s", result.SSLExpiredDate),
