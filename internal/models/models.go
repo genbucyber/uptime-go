@@ -1,6 +1,9 @@
 package models
 
 import (
+	"encoding/json"
+	"fmt"
+	"log"
 	"time"
 	"uptime-go/internal/helper"
 
@@ -54,6 +57,11 @@ type Incident struct {
 	Monitor     Monitor      `gorm:"foreignKey:MonitorID"`
 }
 
+type Response struct {
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+}
+
 func (h *MonitorHistory) BeforeCreate(tx *gorm.DB) (err error) {
 	h.ID = helper.GenerateRandomID()
 
@@ -71,4 +79,15 @@ func (e IncidentType) String() string {
 	default:
 		return "Unknown error"
 	}
+}
+
+func (r Response) Print() {
+	data, err := json.Marshal(r)
+
+	if err != nil {
+		log.Printf("error serializing response: %v", err)
+		return
+	}
+
+	fmt.Println(string(data))
 }

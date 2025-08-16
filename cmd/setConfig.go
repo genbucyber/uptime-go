@@ -1,15 +1,26 @@
 package cmd
 
 import (
-	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"uptime-go/internal/configuration"
+	"uptime-go/internal/models"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
+
+type MonitorConfig struct {
+	Monitor []struct {
+		URL                      string `json:"url"`
+		Enabled                  bool   `json:"enabled"`
+		ResponseTimeThreshold    string `json:"response_time_threshold"`
+		Interval                 string `json:"interval"`
+		CertificateMonitoring    bool   `json:"certificate_monitoring"`
+		CertificateExpiredBefore string `json:"certificate_expired_before"`
+	} `json:"monitor"`
+}
 
 // setConfigCmd represents the set-config command
 var setConfigCmd = &cobra.Command{
@@ -20,35 +31,32 @@ var setConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		jsonConfig := args[0]
 
-		v := viper.New()
-		v.SetConfigType("json")
-		if err := v.ReadConfig(bytes.NewBuffer([]byte(jsonConfig))); err != nil {
-			fmt.Fprintf(os.Stderr, "Error while reading JSON: %v\n", err)
+		var config MonitorConfig
+
+		if err := json.Unmarshal([]byte(jsonConfig), &config); err != nil {
+			models.Response{
+				Message: fmt.Sprintf("Error while decode config: %v", err),
+				Data:    jsonConfig,
+			}.Print()
 			os.Exit(1)
 		}
 
-		configs := v.Get("configs")
-		if configs == nil {
-			msg := "Error: 'configs' key not found in the input JSON"
-			fmt.Fprintln(os.Stderr, msg)
-			fmt.Printf(`"message":"%s"`, msg)
-			os.Exit(1)
-		}
-
-		yamlData, err := yaml.Marshal(map[string]any{"monitor": configs})
+		yamlConfig, err := yaml.Marshal(config)
 
 		if err != nil {
-			msg := fmt.Sprintf("Error marshalling to YAML: %v\n", err)
-			fmt.Fprintln(os.Stderr, msg)
-			fmt.Printf(`"message":"%s"`, msg)
+			models.Response{
+				Message: fmt.Sprintf("Error marshalling to YAML: %v", err),
+				Data:    jsonConfig,
+			}.Print()
 			os.Exit(1)
 		}
 
-		err = os.WriteFile(configuration.Config.ConfigFile, yamlData, 0644)
+		err = os.WriteFile(configuration.Config.ConfigFile, yamlConfig, 0644)
 		if err != nil {
-			msg := fmt.Sprintf("Error writing YAML file: %v\n", err)
-			fmt.Fprintln(os.Stderr, msg)
-			fmt.Printf(`"message":"%s"`, msg)
+			models.Response{
+				Message: fmt.Sprintf("Error writing YAML file: %v\n", err),
+				Data:    jsonConfig,
+			}.Print()
 			os.Exit(1)
 		}
 	},
