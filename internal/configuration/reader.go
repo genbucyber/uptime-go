@@ -94,7 +94,7 @@ func (c *ConfigReader) ParseConfig() ([]*models.Monitor, error) {
 			expired := ParseDuration(sslExpired, "1M")
 			config.CertificateExpiredBefore = &expired
 		} else {
-			expired := ParseDuration(sslExpired, "1M")
+			expired := ParseDuration("1M", "1M")
 			config.CertificateExpiredBefore = &expired
 		}
 
