@@ -11,17 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type MonitorConfig struct {
-	Monitor []struct {
-		URL                      string `json:"url" yaml:"url"`
-		Enabled                  bool   `json:"enabled" yaml:"enabled"`
-		ResponseTimeThreshold    string `json:"response_time_threshold" yaml:"response_time_threshold"`
-		Interval                 string `json:"interval" yaml:"interval"`
-		CertificateMonitoring    bool   `json:"certificate_monitoring" yaml:"certificate_monitoring"`
-		CertificateExpiredBefore string `json:"certificate_expired_before" yaml:"certificate_expired_before"`
-	} `json:"monitor"`
-}
-
 // setConfigCmd represents the set-config command
 var setConfigCmd = &cobra.Command{
 	Use:   "set-config",
@@ -31,7 +20,9 @@ var setConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		jsonConfig := args[0]
 
-		var config MonitorConfig
+		var config struct {
+			Monitor []configuration.MonitorConfig `json:"monitor"`
+		}
 
 		if err := json.Unmarshal([]byte(jsonConfig), &config); err != nil {
 			models.Response{

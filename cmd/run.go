@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"uptime-go/internal/configuration"
 	"uptime-go/internal/helper"
 	"uptime-go/internal/monitor"
@@ -25,78 +24,53 @@ It loads websites from the configuration and continuously checks their uptime.
 Use this command to start the monitoring service.
 Example:
   uptime-go run --config /path/to/your/config.yml`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(configuration.Config.Monitor) <= 0 {
+			return fmt.Errorf("no valid website configurations found in config file")
+		}
+
 		if noTimeInLog {
 			log.SetFlags(0)
 		}
 
-		runMonitorMode()
-	},
-}
+		configs := configuration.Config.Monitor
 
-// runMonitorMode reads the configuration file and starts continuous monitoring
-func runMonitorMode() {
-	// Ensure config file is absolute
-	if !filepath.IsAbs(configuration.Config.ConfigFile) {
-		absPath, err := filepath.Abs(configuration.Config.ConfigFile)
-		if err == nil {
-			configuration.Config.ConfigFile = absPath
+		var urls []string
+
+		for _, r := range configs {
+			r.ID = helper.GenerateRandomID()
+			urls = append(urls, r.URL)
 		}
-	}
 
-	// Read configuration
-	fmt.Printf("Loading configuration from %s\n", configuration.Config.ConfigFile)
-	configReader := configuration.NewConfigReader()
-	if err := configReader.ReadConfig(configuration.Config.ConfigFile); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading configuration: %v\n", err)
-		os.Exit(ExitErrorConfig)
-	}
+		// Initialize database
+		db, err := database.InitializeDatabase()
+		if err != nil {
+			fmt.Printf("failed to initialize database: %v", err)
+			os.Exit(ExitErrorConnection)
+		}
 
-	// Get uptime configuration
-	uptimeConfigs, err := configReader.ParseConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing configuration: %v\n", err)
-		os.Exit(ExitErrorConfig)
-	}
+		// Merge config
+		db.UpsertRecord(configs, "url", &[]string{
+			"url",
+			"enabled",
+			"response_time_threshold",
+			"interval",
+			"certificate_monitoring",
+			"certificate_expired_before",
+		})
+		db.DB.Where("url IN ?", urls).Find(&configs)
 
-	if len(uptimeConfigs) == 0 {
-		fmt.Fprintln(os.Stderr, "No valid website configurations found in config file")
-		os.Exit(ExitErrorConfig)
-	}
+		// Initialize and start monitor
+		uptimeMonitor, err := monitor.NewUptimeMonitor(db, configs)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error initializing monitor: %v\n", err)
+			os.Exit(ExitErrorConfig)
+		}
 
-	var urls []string
+		uptimeMonitor.Start()
 
-	for _, r := range uptimeConfigs {
-		r.ID = helper.GenerateRandomID()
-		urls = append(urls, r.URL)
-	}
-
-	// Initialize database
-	db, err := database.InitializeDatabase()
-	if err != nil {
-		fmt.Printf("failed to initialize database: %v", err)
-		os.Exit(ExitErrorConnection)
-	}
-
-	// Merge config
-	db.UpsertRecord(uptimeConfigs, "url", &[]string{
-		"url",
-		"enabled",
-		"response_time_threshold",
-		"interval",
-		"certificate_monitoring",
-		"certificate_expired_before",
-	})
-	db.DB.Where("url IN ?", urls).Find(&uptimeConfigs)
-
-	// Initialize and start monitor
-	uptimeMonitor, err := monitor.NewUptimeMonitor(db, uptimeConfigs)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing monitor: %v\n", err)
-		os.Exit(ExitErrorConfig)
-	}
-
-	uptimeMonitor.Start()
+		return nil
+	},
 }
 
 func init() {

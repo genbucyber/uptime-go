@@ -25,9 +25,7 @@ func sendRequest(method string, url string, payload any) (*http.Response, []byte
 		Timeout: 10 * time.Second,
 	}
 
-	reader := configuration.NewConfigReader()
-	reader.ReadConfig(configuration.OJTGUARDIAN_CONFIG)
-	token := reader.GetServerToken()
+	token := configuration.Config.Main.Auth.Token
 	if token == "" {
 		log.Printf("[webhook] invalid server token")
 		return nil, nil, fmt.Errorf("error creating request for %s: invalid server token", url)
@@ -93,7 +91,7 @@ func NotifyIncident(incident *models.Incident, severity incident.Severity, attri
 		Attributes: attributes,
 	}
 
-	response, body, err := sendRequest("POST", configuration.INCIDENT_CREATE_URL, payload)
+	response, body, err := sendRequest("POST", configuration.GetIncidentCreateURL(), payload)
 	if err != nil {
 		log.Printf("[webhook] Failed to send incident notification for %s: %v", incident.Monitor.URL, err)
 		return 0, err
