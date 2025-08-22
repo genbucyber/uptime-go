@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 	"time"
+	"uptime-go/internal/incident"
 	"uptime-go/internal/models"
 	"uptime-go/internal/net"
 	"uptime-go/internal/net/database"
@@ -23,7 +24,7 @@ func TestMonitorHandleWebsiteDown_NewTimeoutIncident(t *testing.T) {
 	result, incidentType := uptimeMonitor.handleWebsiteDown(&monitor, &checkResult, os.ErrDeadlineExceeded)
 
 	assert.True(t, result)
-	assert.Equal(t, incidentType, models.Timeout)
+	assert.Equal(t, incidentType, incident.Timeout)
 }
 
 func TestMonitorHandleWebsiteDown_IncidentAlreadyExists(t *testing.T) {
@@ -34,7 +35,7 @@ func TestMonitorHandleWebsiteDown_IncidentAlreadyExists(t *testing.T) {
 	checkResult := net.CheckResults{}
 	monitor := models.Monitor{
 		Incidents: []models.Incident{
-			{Type: models.UnexpectedStatusCode},
+			{Type: incident.UnexpectedStatusCode},
 		},
 	}
 
@@ -42,11 +43,11 @@ func TestMonitorHandleWebsiteDown_IncidentAlreadyExists(t *testing.T) {
 
 	result, incidentType := uptimeMonitor.handleWebsiteDown(
 		&monitor, &checkResult,
-		errors.New(models.UnexpectedStatusCode.String()),
+		errors.New(string(incident.UnexpectedStatusCode)),
 	)
 
 	assert.False(t, result)
-	assert.Equal(t, incidentType, models.UnexpectedStatusCode)
+	assert.Equal(t, incidentType, incident.UnexpectedStatusCode)
 }
 
 func TestMonitorResolveIncidents_CanBeSolve(t *testing.T) {
@@ -54,13 +55,13 @@ func TestMonitorResolveIncidents_CanBeSolve(t *testing.T) {
 	uptimeMonitor, _ := NewUptimeMonitor(db, nil)
 	monitor := models.Monitor{
 		Incidents: []models.Incident{
-			{Type: models.Timeout},
+			{Type: incident.Timeout},
 		},
 	}
 
 	db.DB.Create(&monitor)
 
-	result := uptimeMonitor.resolveIncidents(&monitor, models.Timeout)
+	result := uptimeMonitor.resolveIncidents(&monitor, incident.Timeout)
 	assert.True(t, result)
 }
 
@@ -71,7 +72,7 @@ func TestMonitorResolveIncidents_NothingToSolve(t *testing.T) {
 
 	db.DB.Create(&monitor)
 
-	result := uptimeMonitor.resolveIncidents(&monitor, models.SSLExpired)
+	result := uptimeMonitor.resolveIncidents(&monitor, incident.SSLExpired)
 	assert.False(t, result)
 }
 
@@ -81,13 +82,13 @@ func TestMonitorResolveIncidents_NothingToSolve2(t *testing.T) {
 	uptimeMonitor, _ := NewUptimeMonitor(db, nil)
 	monitor := models.Monitor{
 		Incidents: []models.Incident{
-			{Type: models.Timeout, SolvedAt: &now},
+			{Type: incident.Timeout, SolvedAt: &now},
 		},
 	}
 
 	db.DB.Create(&monitor)
 
-	result := uptimeMonitor.resolveIncidents(&monitor, models.Timeout)
+	result := uptimeMonitor.resolveIncidents(&monitor, incident.Timeout)
 	assert.False(t, result)
 }
 
@@ -115,7 +116,7 @@ func TestHandleSSL_Solve(t *testing.T) {
 	monitor := models.Monitor{
 		CertificateExpiredBefore: &expiredDuration,
 		Incidents: []models.Incident{
-			{Type: models.SSLExpired},
+			{Type: incident.SSLExpired},
 		},
 	}
 

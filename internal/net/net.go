@@ -2,6 +2,7 @@ package net
 
 import (
 	"crypto/tls"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -85,4 +86,19 @@ func isIPAddress(host string) bool {
 	hostname := u.Hostname()
 
 	return net.ParseIP(hostname) != nil
+}
+
+func GetIPAddress() (string, error) {
+	resp, err := http.Get("https://api.ipify.org")
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
 }

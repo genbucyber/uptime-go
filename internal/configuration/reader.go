@@ -105,6 +105,20 @@ func (c *ConfigReader) ParseConfig() ([]*models.Monitor, error) {
 	return configList, nil
 }
 
+func (c *ConfigReader) GetServerToken() string {
+	auth, ok := c.viper.Get("auth").(map[string]any)
+	if !ok {
+		log.Println("failed to read server token")
+	}
+
+	token, ok := auth["token"].(string)
+	if !ok {
+		return ""
+	}
+
+	return token
+}
+
 func ParseDuration(input string, defaultValue string) time.Duration {
 	re := regexp.MustCompile(`(\d+)([smhd])`)
 	matches := re.FindAllStringSubmatch(input, -1)

@@ -3,10 +3,10 @@ package database
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 	"uptime-go/internal/configuration"
+	"uptime-go/internal/incident"
 	"uptime-go/internal/models"
 
 	"github.com/glebarez/sqlite"
@@ -21,11 +21,6 @@ type Database struct {
 
 func InitializeDatabase() (*Database, error) {
 	DBPath := configuration.Config.DBFile
-
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(DBPath), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
-	}
 
 	// Check if the database file exists, if not create it
 	if _, err := os.Stat(DBPath); os.IsNotExist(err) {
@@ -95,17 +90,24 @@ func InitializeTestDatabase() (*Database, error) {
 	return &Database{DB: db}, nil
 }
 
-func (db *Database) UpsertRecord(record any, column string) error {
+func (db *Database) UpsertRecord(record any, column string, updateColumn *[]string) error {
 	// Create record if not exists else update
 
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
+	stmt := clause.OnConflict{
+		Columns:   []clause.Column{{Name: column}},
+		UpdateAll: true,
+	}
+
+	if updateColumn != nil {
+		stmt.UpdateAll = false
+		stmt.DoUpdates = clause.AssignmentColumns(*updateColumn)
+	}
+
 	return db.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: column}},
-			UpdateAll: true,
-		}).Create(record).Error; err != nil {
+		if err := tx.Clauses(stmt).Create(record).Error; err != nil {
 			return fmt.Errorf("failed to save record: %w", err)
 		}
 		return nil
@@ -113,10 +115,10 @@ func (db *Database) UpsertRecord(record any, column string) error {
 }
 
 func (db *Database) Upsert(record any) error {
-	return db.UpsertRecord(record, "id")
+	return db.UpsertRecord(record, "id", nil)
 }
 
-func (db *Database) GetLastIncident(url string, incidentType models.IncidentType) *models.Incident {
+func (db *Database) GetLastIncident(url string, incidentType incident.Type) *models.Incident {
 	var incident models.Incident
 
 	db.mutex.RLock()

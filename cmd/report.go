@@ -23,7 +23,9 @@ With a URL flag, it provides a detailed report for the specified site, including
 	Run: func(cmd *cobra.Command, args []string) {
 		db, err := database.InitializeDatabase()
 		if err != nil {
-			fmt.Printf("failed to initialize database: %v\n", err)
+			models.Response{
+				Message: "failed to initialize sqlite database",
+			}.Print()
 			os.Exit(ExitErrorConnection)
 		}
 
@@ -33,7 +35,9 @@ With a URL flag, it provides a detailed report for the specified site, including
 
 			output, err := json.Marshal(monitor)
 			if err != nil {
-				fmt.Println("error while serializing output")
+				models.Response{
+					Message: "Error while serializing output",
+				}.Print()
 				os.Exit(1)
 			}
 
@@ -50,13 +54,22 @@ With a URL flag, it provides a detailed report for the specified site, including
 			Find(&monitor)
 
 		if monitor.CreatedAt.IsZero() {
-			fmt.Printf("%s: record not found\n", domainURL)
+			models.Response{
+				Message: "Record not found",
+			}.Print()
 			os.Exit(1)
+		}
+
+		// Reverse record
+		for i, j := 0, len(monitor.Histories)-1; i < j; i, j = i+1, j-1 {
+			monitor.Histories[i], monitor.Histories[j] = monitor.Histories[j], monitor.Histories[i]
 		}
 
 		output, err := json.Marshal(monitor)
 		if err != nil {
-			fmt.Printf("%s: error while encoding result\n", domainURL)
+			models.Response{
+				Message: "Error while encoding result",
+			}.Print()
 			os.Exit(1)
 		}
 

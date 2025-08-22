@@ -59,6 +59,11 @@ func runMonitorMode() {
 		os.Exit(ExitErrorConfig)
 	}
 
+	if len(uptimeConfigs) == 0 {
+		fmt.Fprintln(os.Stderr, "No valid website configurations found in config file")
+		os.Exit(ExitErrorConfig)
+	}
+
 	var urls []string
 
 	for _, r := range uptimeConfigs {
@@ -74,7 +79,14 @@ func runMonitorMode() {
 	}
 
 	// Merge config
-	db.UpsertRecord(uptimeConfigs, "url")
+	db.UpsertRecord(uptimeConfigs, "url", &[]string{
+		"url",
+		"enabled",
+		"response_time_threshold",
+		"interval",
+		"certificate_monitoring",
+		"certificate_expired_before",
+	})
 	db.DB.Where("url IN ?", urls).Find(&uptimeConfigs)
 
 	// Initialize and start monitor
