@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"time"
 	"uptime-go/internal/configuration"
@@ -63,7 +64,7 @@ func sendRequest(method string, url string, payload any) (*http.Response, []byte
 }
 
 func NotifyIncident(incident *models.Incident, severity incident.Severity, attributes map[string]any) (uint64, error) {
-	if incident.Monitor.CreatedAt.IsZero() {
+	if incident.Monitor.IsNotExists() {
 		return 0, fmt.Errorf("incident monitor data is not properly initialized")
 	}
 
@@ -72,6 +73,13 @@ func NotifyIncident(incident *models.Incident, severity incident.Severity, attri
 		log.Printf("[webhook] Failed to send incident notification for %s: failed to get server ip address %v", incident.Monitor.URL, err)
 		return 0, err
 	}
+
+	// Default attributes
+	attr := map[string]any{
+		"url": incident.Monitor.URL,
+	}
+
+	maps.Copy(attr, attributes)
 
 	payload := struct {
 		ServerIP   string         `json:"server_ip"`
@@ -83,12 +91,12 @@ func NotifyIncident(incident *models.Incident, severity incident.Severity, attri
 		Attributes map[string]any `json:"attributes,omitempty"`
 	}{
 		ServerIP:   ipAddress,
-		Module:     "fim",
+		Module:     "uptime-plugin",
 		Severity:   string(severity),
 		Message:    incident.Description,
-		Event:      "uptime_" + string(incident.Type),
-		Tags:       []string{"uptime", "monitoring"},
-		Attributes: attributes,
+		Event:      "down",
+		Tags:       []string{"uptime", "monitoring", string(incident.Type)},
+		Attributes: attr,
 	}
 
 	response, body, err := sendRequest("POST", configuration.GetIncidentCreateURL(), payload)
@@ -110,7 +118,7 @@ func NotifyIncident(incident *models.Incident, severity incident.Severity, attri
 		return 0, err
 	}
 
-	log.Printf("[webhook] Successfully created incident for monitor %s. Incident Master ID: %d", incident.Monitor.URL, result.Data.ID)
+	log.Printf("[webhook] Successfully created incident for monitor %s - Reason: %s - Incident Master ID: %d", incident.Monitor.URL, incident.Type, result.Data.ID)
 	return result.Data.ID, nil
 }
 

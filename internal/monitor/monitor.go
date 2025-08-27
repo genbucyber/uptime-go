@@ -115,7 +115,9 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 
 		m.resolveIncidents(monitor, incident.UnexpectedStatusCode)
 		m.resolveIncidents(monitor, incident.Timeout)
-		m.handleSSL(monitor, result)
+		if monitor.CertificateMonitoring {
+			m.handleSSL(monitor, result)
+		}
 	} else {
 		statusText = "DOWN"
 		m.handleWebsiteDown(monitor, result, err)
@@ -160,7 +162,7 @@ func (m *UptimeMonitor) handleWebsiteDown(monitor *models.Monitor, result *net.C
 	}
 
 	lastIncident := m.db.GetLastIncident(monitor.URL, incidentType)
-	if !lastIncident.CreatedAt.IsZero() {
+	if lastIncident.IsExists() {
 		return false, incidentType // Incident already recorded
 	}
 
@@ -192,7 +194,7 @@ func (m *UptimeMonitor) resolveIncidents(monitor *models.Monitor, incidentType i
 
 	now := time.Now()
 	lastIncident := m.db.GetLastIncident(monitor.URL, incidentType)
-	if !lastIncident.CreatedAt.IsZero() {
+	if lastIncident.IsExists() {
 		lastIncident.SolvedAt = &now
 		monitor.LastUp = &now
 		m.db.Upsert(lastIncident)
@@ -206,41 +208,86 @@ func (m *UptimeMonitor) resolveIncidents(monitor *models.Monitor, incidentType i
 }
 
 func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResults) bool {
-	now := time.Now()
-	lastSSLIncident := m.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+	// If SSL expiry date is not available, do nothing.
+	if result.SSLExpiredDate == nil {
+		return false
+	}
 
-	isSSLExpiringSoon := result.SSLExpiredDate != nil &&
-		monitor.CertificateExpiredBefore != nil &&
+	now := time.Now()
+	lastIncident := m.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+
+	attr := map[string]any{
+		"expired_date": result.SSLExpiredDate,
+	}
+
+	// Certificate is expired.
+	if time.Until(*result.SSLExpiredDate) <= 0 {
+
+		// If the existing incident is for "almost expired", update it to "expired".
+		if lastIncident.IsExists() && lastIncident.Description == "Certificate almost expired" {
+			log.Printf("%s - Certificate expired - [%s]", monitor.URL, result.SSLExpiredDate)
+			lastIncident.Description = "Certificate expired"
+			if id, err := net.NotifyIncident(lastIncident, incident.HIGH, attr); err == nil {
+				lastIncident.IncidentID = id
+			}
+			m.db.Upsert(lastIncident)
+			return true
+		}
+
+		// If there is no incident, create a new "expired" incident.
+		if lastIncident.IsNotExists() {
+			log.Printf("%s - Certificate expired - [%s]", monitor.URL, result.SSLExpiredDate)
+			inc := &models.Incident{
+				ID:          helper.GenerateRandomID(),
+				MonitorID:   monitor.ID,
+				Type:        incident.SSLExpired,
+				Description: "Certificate expired",
+				Monitor:     *monitor,
+			}
+			if id, err := net.NotifyIncident(inc, incident.HIGH, attr); err == nil {
+				inc.IncidentID = id
+			}
+			m.db.DB.Create(inc)
+			return true
+		}
+
+		return false // Incident for expired already exists.
+	}
+
+	isSSLExpiringSoon := monitor.CertificateExpiredBefore != nil &&
 		time.Until(*result.SSLExpiredDate) <= *monitor.CertificateExpiredBefore
 
-	if isSSLExpiringSoon && lastSSLIncident.CreatedAt.IsZero() {
-		log.Printf("%s - Please update SSL Certificate - [%s]", monitor.URL, result.SSLExpiredDate)
-		inc := &models.Incident{
-			ID:          helper.GenerateRandomID(),
-			MonitorID:   monitor.ID,
-			Type:        incident.SSLExpired,
-			Description: "Certificate almost expired",
-			Monitor:     *monitor,
+	// Certificate is expiring soon.
+	if isSSLExpiringSoon {
+
+		// If no incident exists, create a new "almost expired" incident.
+		if lastIncident.IsNotExists() {
+			log.Printf("%s - Please update SSL Certificate - [%s]", monitor.URL, result.SSLExpiredDate)
+			inc := &models.Incident{
+				ID:          helper.GenerateRandomID(),
+				MonitorID:   monitor.ID,
+				Type:        incident.SSLExpired,
+				Description: "Certificate almost expired",
+				Monitor:     *monitor,
+			}
+			if id, err := net.NotifyIncident(inc, incident.INFO, attr); err == nil {
+				inc.IncidentID = id
+			}
+			m.db.DB.Create(inc)
+			return true
 		}
 
-		attr := map[string]any{
-			"expired_date": result.SSLExpiredDate,
-		}
+		return false // Incident for expiring soon already exists.
+	}
 
-		if id, err := net.NotifyIncident(inc, incident.INFO, attr); err == nil {
-			inc.IncidentID = id
-		}
+	if lastIncident.IsExists() {
+		// Manual resolve
+		// if lastIncident.IncidentID != 0 {
+		// 	net.UpdateIncidentStatus(lastIncident, incident.Resolved)
+		// }
 
-		m.db.DB.Create(inc)
-
-		return true
-	} else if !isSSLExpiringSoon && !lastSSLIncident.CreatedAt.IsZero() {
-		lastSSLIncident.SolvedAt = &now
-		if lastSSLIncident.IncidentID != 0 {
-			net.UpdateIncidentStatus(lastSSLIncident, incident.Resolved)
-		}
-
-		m.db.Upsert(lastSSLIncident)
+		lastIncident.SolvedAt = &now
+		m.db.Upsert(lastIncident)
 		log.Printf("%s - SSL Updated\n", monitor.URL)
 		return true
 	}

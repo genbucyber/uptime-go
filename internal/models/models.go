@@ -63,6 +63,26 @@ func (h *MonitorHistory) BeforeCreate(tx *gorm.DB) (err error) {
 	return nil
 }
 
+func (m Monitor) IsExists() bool {
+	return !m.CreatedAt.IsZero()
+}
+
+func (m Monitor) IsNotExists() bool {
+	return m.CreatedAt.IsZero()
+}
+
+func (i Incident) IsExists() bool {
+	return !i.CreatedAt.IsZero()
+}
+
+func (i Incident) IsNotExists() bool {
+	return i.CreatedAt.IsZero()
+}
+
+func (i Incident) IsSolved() bool {
+	return i.SolvedAt != nil
+}
+
 func (r Response) Print() {
 	data, err := json.Marshal(r)
 

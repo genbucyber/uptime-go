@@ -53,7 +53,7 @@ With a URL flag, it provides a detailed report for the specified site, including
 			Where("url = ?", domainURL).
 			Find(&monitor)
 
-		if monitor.CreatedAt.IsZero() {
+		if monitor.IsNotExists() {
 			models.Response{
 				Message: "Record not found",
 			}.Print()
