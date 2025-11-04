@@ -91,10 +91,10 @@ func NotifyIncident(incident *models.Incident, severity incident.Severity, attri
 		Attributes map[string]any `json:"attributes,omitempty"`
 	}{
 		ServerIP:   ipAddress,
-		Module:     "uptime-plugin",
+		Module:     "UptimePlugin",
 		Severity:   string(severity),
 		Message:    incident.Description,
-		Event:      "down",
+		Event:      "website_down",
 		Tags:       []string{"uptime", "monitoring", string(incident.Type)},
 		Attributes: attr,
 	}

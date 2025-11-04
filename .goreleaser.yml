@@ -36,6 +36,7 @@ changelog:
       - "^test:"
       - "^chore:"
       - "^ci:"
+      - "^Merge"
 
 release:
   draft: false

@@ -15,7 +15,7 @@ const (
 	VERSION            = "0.1.2"
 	OJTGUARDIAN_PATH   = "/etc/ojtguardian"
 	OJTGUARDIAN_CONFIG = OJTGUARDIAN_PATH + "/main.yml"
-	PLUGIN_PATH        = "/etc/ojtguardian/plugins/uptime"
+	PLUGIN_PATH        = OJTGUARDIAN_PATH + "/plugins/uptime"
 	CONFIG_PATH        = PLUGIN_PATH + "/config.yml"
 	DB_PATH            = PLUGIN_PATH + "/uptime.db"
 )
