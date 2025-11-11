@@ -11,7 +11,7 @@ args_bin = [
   "tmp/uptime.db",
   "--api",
   "--api-port",
-  "5002",
+  "5004",
   "--log-level",
   "debug",
   "--log-path",

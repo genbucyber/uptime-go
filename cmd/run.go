@@ -114,6 +114,6 @@ func init() {
 
 	// API flags
 	runCmd.Flags().BoolVar(&enableAPI, "api", false, "Enable API server for remote management")
-	runCmd.Flags().StringVar(&apiPort, "api-port", "5002", "API server port")
+	runCmd.Flags().StringVar(&apiPort, "api-port", "5004", "API server port")
 	runCmd.Flags().StringVar(&apiBind, "api-bind", "127.0.0.1", "API server bind address")
 }
