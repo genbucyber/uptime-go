@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"runtime"
 	"testing"
 	"time"
 
-	"uptime-go/internal/configuration"
 	"uptime-go/internal/models"
 	"uptime-go/internal/monitor"
 	"uptime-go/internal/net/database"
+
+	"github.com/rs/zerolog/log"
 )
 
 // memStats holds memory statistics
@@ -38,25 +38,25 @@ func getMemStats() memStats {
 }
 
 // printMemUsage prints memory usage statistics
-func printMemStats(before, after memStats) {
-	fmt.Printf("Memory Usage:\n")
-	fmt.Printf("  Heap Alloc: %v -> %v (%+v)\n",
+func printMemStats(b *testing.B, before, after memStats) {
+	b.Logf("Memory Usage:\n")
+	b.Logf("  Heap Alloc: %v -> %v (%+v)\n",
 		byteSize(before.HeapAlloc),
 		byteSize(after.HeapAlloc),
 		byteSize(after.HeapAlloc-before.HeapAlloc))
-	fmt.Printf("  Total Alloc: %v -> %v (%+v)\n",
+	b.Logf("  Total Alloc: %v -> %v (%+v)\n",
 		byteSize(before.TotalAlloc),
 		byteSize(after.TotalAlloc),
 		byteSize(after.TotalAlloc-before.TotalAlloc))
-	fmt.Printf("  Mallocs: %v -> %v (%+v)\n",
+	b.Logf("  Mallocs: %v -> %v (%+v)\n",
 		before.Mallocs,
 		after.Mallocs,
 		after.Mallocs-before.Mallocs)
-	fmt.Printf("  GC Runs: %v -> %v (%+v)\n",
+	b.Logf("  GC Runs: %v -> %v (%+v)\n",
 		before.NumGC,
 		after.NumGC,
 		after.NumGC-before.NumGC)
-	fmt.Printf("  GC Pause Total: %v -> %v (%+v)\n",
+	b.Logf("  GC Pause Total: %v -> %v (%+v)\n",
 		time.Duration(before.PauseTotalNs),
 		time.Duration(after.PauseTotalNs),
 		time.Duration(after.PauseTotalNs-before.PauseTotalNs))
@@ -114,13 +114,11 @@ func benchmarkMonitor(b *testing.B, websiteCount int) {
 	beforeStats := getMemStats()
 	startTime := time.Now()
 
-	configuration.Config.DBFile = "./uptime.db"
-
 	// Create database connection
-	db, err := database.InitializeDatabase()
+	log.Info().Msg("Calling InitializeTestDatabase...")
+	db, err := database.InitializeTestDatabase()
 	if err != nil {
-		fmt.Printf("failed to initialize database: %v", err)
-		os.Exit(1)
+		b.Fatalf("failed to initialize database: %v", err)
 	}
 
 	// Create monitor
@@ -136,7 +134,7 @@ func benchmarkMonitor(b *testing.B, websiteCount int) {
 	monitoringDuration := 5 * time.Second
 	go func() {
 		time.Sleep(monitoringDuration)
-		uptimeMonitor.Stop()
+		uptimeMonitor.Shutdown()
 	}()
 
 	// Start the monitor
@@ -156,7 +154,7 @@ func benchmarkMonitor(b *testing.B, websiteCount int) {
 
 	// Log memory usage
 	b.Logf("Memory usage:")
-	printMemStats(beforeStats, afterStats)
+	printMemStats(b, beforeStats, afterStats)
 }
 
 // BenchmarkMonitor1Site benchmarks monitoring 1 website

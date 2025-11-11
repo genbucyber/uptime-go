@@ -3,11 +3,11 @@ package models
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 	"uptime-go/internal/helper"
 	"uptime-go/internal/incident"
 
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -87,7 +87,7 @@ func (r Response) Print() {
 	data, err := json.Marshal(r)
 
 	if err != nil {
-		log.Printf("error serializing response: %v", err)
+		log.Error().Err(err).Msg("error serializing response")
 		return
 	}
 

@@ -2,17 +2,24 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"uptime-go/internal/api"
 	"uptime-go/internal/configuration"
 	"uptime-go/internal/helper"
 	"uptime-go/internal/monitor"
 	"uptime-go/internal/net/database"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
-var noTimeInLog bool
+var (
+	enableAPI bool
+	apiBind   string
+	apiPort   string
+)
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
@@ -25,14 +32,7 @@ Use this command to start the monitoring service.
 Example:
   uptime-go run --config /path/to/your/config.yml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(configuration.Config.Monitor) <= 0 {
-			return fmt.Errorf("no valid website configurations found in config file")
-		}
-
-		if noTimeInLog {
-			log.SetFlags(0)
-		}
-
+		// Monitoring Section
 		configs := configuration.Config.Monitor
 
 		var urls []string
@@ -43,10 +43,10 @@ Example:
 		}
 
 		// Initialize database
-		db, err := database.InitializeDatabase()
+		db, err := database.New(databasePath)
 		if err != nil {
-			fmt.Printf("failed to initialize database: %v", err)
-			os.Exit(ExitErrorConnection)
+			log.Error().Err(err).Str("database_path", databasePath).Msg("Error initializing database")
+			return err
 		}
 
 		// Merge config
@@ -67,7 +67,43 @@ Example:
 			os.Exit(ExitErrorConfig)
 		}
 
-		uptimeMonitor.Start()
+		go func() {
+			uptimeMonitor.Start()
+		}()
+
+		// API Section
+		var apiServer *api.Server
+		if enableAPI {
+			log.Info().Msg("API server enabled, starting...")
+
+			apiServer = api.NewServer(api.ServerConfig{
+				Bind:       apiBind,
+				Port:       apiPort,
+				ConfigPath: configPath,
+			}, db)
+
+			go func() {
+				if err := apiServer.Start(); err != nil {
+					log.Error().Err(err).Msg("API server failed")
+				}
+			}()
+		}
+
+		// Set up signal handling for graceful shutdown
+		log.Info().Msg("Press Ctrl+C to stop")
+
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+		// Wait for shutdown signal
+		<-sigChan
+		log.Info().Msg("Shutdown signal received, shutting down...")
+
+		uptimeMonitor.Shutdown()
+
+		if apiServer != nil {
+			apiServer.Shutdown()
+		}
 
 		return nil
 	},
@@ -75,5 +111,9 @@ Example:
 
 func init() {
 	rootCmd.AddCommand(runCmd)
-	runCmd.Flags().BoolVar(&noTimeInLog, "no-time", false, "hide time in log")
+
+	// API flags
+	runCmd.Flags().BoolVar(&enableAPI, "api", false, "Enable API server for remote management")
+	runCmd.Flags().StringVar(&apiPort, "api-port", "5004", "API server port")
+	runCmd.Flags().StringVar(&apiBind, "api-bind", "127.0.0.1", "API server bind address")
 }

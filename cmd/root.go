@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"uptime-go/internal/configuration"
+	"uptime-go/pkg/log"
 
 	"github.com/spf13/cobra"
 )
@@ -14,6 +15,13 @@ const (
 	ExitErrorInvalidArgs = 1
 	ExitErrorConnection  = 2
 	ExitErrorConfig      = 3
+)
+
+var (
+	configPath   string
+	databasePath string
+	logLevel     string
+	logPath      string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -27,7 +35,14 @@ It provides continuous monitoring of websites defined in the configuration file.
 Usage: uptime-go [--config=path/to/uptime.yaml] run`,
 	Args: cobra.NoArgs,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		return configuration.Load()
+		log.InitLogger(logPath)
+		log.SetLogLevel(logLevel)
+
+		if err := configuration.Load(configPath); err != nil {
+			return err
+		}
+
+		return nil
 	},
 }
 
@@ -41,6 +56,8 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&configuration.Config.ConfigFile, "config", "c", configuration.CONFIG_PATH, "Path to configuration file")
-	rootCmd.PersistentFlags().StringVarP(&configuration.Config.DBFile, "database", "", configuration.DB_PATH, "Path to database file")
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "/etc/uptime-go/config.yml", "Path to configuration file")
+	rootCmd.PersistentFlags().StringVarP(&databasePath, "database", "d", "/var/lib/uptime-go/uptime.db", "Path to database file")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().StringVar(&logPath, "log-path", "", "Path to log file")
 }

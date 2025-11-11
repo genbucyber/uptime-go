@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"maps"
 	"net/http"
 	"time"
 	"uptime-go/internal/configuration"
 	"uptime-go/internal/incident"
 	"uptime-go/internal/models"
+
+	"github.com/rs/zerolog/log"
 )
 
 type incidentResponse struct {
@@ -26,9 +27,9 @@ func sendRequest(method string, url string, payload any) (*http.Response, []byte
 		Timeout: 10 * time.Second,
 	}
 
-	token := configuration.Config.Main.Auth.Token
+	token := configuration.Config.Agent.Auth.Token
 	if token == "" {
-		log.Printf("[webhook] invalid server token")
+		log.Error().Msg("invalid server token")
 		return nil, nil, fmt.Errorf("error creating request for %s: invalid server token", url)
 	}
 
@@ -70,7 +71,7 @@ func NotifyIncident(incident *models.Incident, severity incident.Severity, attri
 
 	ipAddress, err := GetIPAddress()
 	if err != nil {
-		log.Printf("[webhook] Failed to send incident notification for %s: failed to get server ip address %v", incident.Monitor.URL, err)
+		log.Error().Err(err).Msgf("Failed to send incident notification for %s: failed to get server ip address", incident.Monitor.URL)
 		return 0, err
 	}
 
@@ -101,30 +102,30 @@ func NotifyIncident(incident *models.Incident, severity incident.Severity, attri
 
 	response, body, err := sendRequest("POST", configuration.GetIncidentCreateURL(), payload)
 	if err != nil {
-		log.Printf("[webhook] Failed to send incident notification for %s: %v", incident.Monitor.URL, err)
+		log.Error().Err(err).Msgf("Failed to send incident notification for %s", incident.Monitor.URL)
 		return 0, err
 	}
 
 	if response.StatusCode != http.StatusCreated {
 		err := fmt.Errorf("failed to create incident, received status code %d. Body: %s", response.StatusCode, string(body))
-		log.Printf("[webhook] %v", err)
+		log.Error().Err(err).Msg("webhook error")
 		return 0, err
 	}
 
 	var result incidentResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		err := fmt.Errorf("failed to decode incident response body: %w. Body: %s", err, string(body))
-		log.Printf("[webhook] %v", err)
+		log.Error().Err(err).Msg("webhook error")
 		return 0, err
 	}
 
-	log.Printf("[webhook] Successfully created incident for monitor %s - Reason: %s - Incident Master ID: %d", incident.Monitor.URL, incident.Type, result.Data.ID)
+	log.Info().Msgf("Successfully created incident for monitor %s - Reason: %s - Incident Master ID: %d", incident.Monitor.URL, incident.Type, result.Data.ID)
 	return result.Data.ID, nil
 }
 
 func UpdateIncidentStatus(incident *models.Incident, status incident.Status) error {
 	if incident.IncidentID == 0 {
-		log.Printf("[webhook] Failed to update incident status for %s: incident_id not set", incident.ID)
+		log.Error().Msgf("Failed to update incident status for %s: incident_id not set", incident.ID)
 	}
 
 	payload := struct {
@@ -134,23 +135,23 @@ func UpdateIncidentStatus(incident *models.Incident, status incident.Status) err
 	url := configuration.GetIncidentStatusURL(incident.IncidentID)
 	response, body, err := sendRequest("POST", url, payload)
 	if err != nil {
-		log.Printf("[webhook] Failed to send status update for incident %d: %v", incident.IncidentID, err)
+		log.Error().Err(err).Msgf("Failed to send status update for incident %d", incident.IncidentID)
 		return err
 	}
 
 	if response.StatusCode != http.StatusOK {
 		err := fmt.Errorf("failed to update incident status, received status code %d. Body: %s", response.StatusCode, string(body))
-		log.Printf("[webhook] %v", err)
+		log.Error().Err(err).Msg("webhook error")
 		return err
 	}
 
 	var result incidentResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		err := fmt.Errorf("failed to decode update status response body: %w. Body: %s", err, string(body))
-		log.Printf("[webhook] %v", err)
+		log.Error().Err(err).Msg("webhook error")
 		return err
 	}
 
-	log.Printf("[webhook] Successfully updated status for incident %d to '%s'. Message: %s", incident.IncidentID, status, result.Message)
+	log.Info().Msgf("Successfully updated status for incident %d to '%s'. Message: %s", incident.IncidentID, status, result.Message)
 	return nil
 }
