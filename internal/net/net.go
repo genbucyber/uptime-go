@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -88,11 +89,34 @@ func isIPAddress(host string) bool {
 	return net.ParseIP(hostname) != nil
 }
 
+var (
+	ipAddress string
+	once      sync.Once
+)
+
 func GetIPAddress() (string, error) {
-	// TODO: implement cache
-	resp, err := http.Get("https://api.ipify.org")
+	var err error
+	once.Do(func() {
+		urls := []string{
+			"https://api.ipify.org",
+			"https://ifconfig.me/ip",
+		}
+
+		for _, url := range urls {
+			ipAddress, err = fetchIP(url)
+			if err == nil {
+				return
+			}
+		}
+	})
+
+	return ipAddress, err
+}
+
+func fetchIP(url string) (string, error) {
+	resp, err := http.Get(url)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	defer resp.Body.Close()
 

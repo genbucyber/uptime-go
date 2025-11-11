@@ -9,6 +9,7 @@ import (
 	"uptime-go/internal/configuration"
 	"uptime-go/internal/helper"
 	"uptime-go/internal/monitor"
+	"uptime-go/internal/net"
 	"uptime-go/internal/net/database"
 
 	"github.com/rs/zerolog/log"
@@ -69,6 +70,16 @@ Example:
 
 		go func() {
 			uptimeMonitor.Start()
+		}()
+
+		go func() {
+			log.Info().Msg("fetching ip address...")
+			ip, err := net.GetIPAddress()
+			if err != nil {
+				log.Error().Err(err).Msg("failed to fetch ip address")
+				return
+			}
+			log.Info().Str("ip", ip).Msg("ip fetched successfully")
 		}()
 
 		// API Section
