@@ -89,6 +89,7 @@ func isIPAddress(host string) bool {
 }
 
 func GetIPAddress() (string, error) {
+	// TODO: implement cache
 	resp, err := http.Get("https://api.ipify.org")
 	if err != nil {
 		panic(err)

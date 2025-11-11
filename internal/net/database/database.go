@@ -5,11 +5,11 @@ import (
 	"os"
 	"sync"
 	"time"
-	"uptime-go/internal/configuration"
 	"uptime-go/internal/incident"
 	"uptime-go/internal/models"
 
 	"github.com/glebarez/sqlite"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -19,61 +19,54 @@ type Database struct {
 	mutex sync.RWMutex
 }
 
-func InitializeDatabase() (*Database, error) {
-	DBPath := configuration.Config.DBFile
-
+func New(dbPath string) (*Database, error) {
 	// Check if the database file exists, if not create it
-	if _, err := os.Stat(DBPath); os.IsNotExist(err) {
-		file, err := os.Create(DBPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create database file: %w", err)
+	if _, errStat := os.Stat(dbPath); dbPath != ":memory:" && errStat != nil {
+		if !os.IsNotExist(errStat) {
+			return nil, errStat
 		}
-		defer file.Close()
+
+		file, errCreate := os.Create(dbPath)
+		if errCreate != nil {
+			return nil, fmt.Errorf("failed to create database file: %w", errCreate)
+		}
+		file.Close()
 	}
 
+	log.Info().Str("database", dbPath).Msg("Connectiong to database...")
+
 	// Open the database connection using GORM and SQLite with connection pool configuration
-	db, err := gorm.Open(sqlite.Open(DBPath+"?_journal_mode=WAL"), &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	gormDB, errOpen := gorm.Open(sqlite.Open(dbPath+"?_journal_mode=WAL&_pragma=foreign_keys"), &gorm.Config{})
+	if errOpen != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", errOpen)
 	}
 
 	// Configure connection pooling
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get database connection: %w", err)
+	sqlDB, errSQL := gormDB.DB()
+	if errSQL != nil {
+		return nil, fmt.Errorf("failed to get database connection: %w", errSQL)
 	}
 
 	// Set connection pool settings
-	// SetMaxIdleConns sets the maximum number of connections in the idle connection pool
 	sqlDB.SetMaxIdleConns(10)
-
-	// SetMaxOpenConns sets the maximum number of open connections to the database
 	sqlDB.SetMaxOpenConns(100)
-
-	// SetConnMaxLifetime sets the maximum amount of time a connection may be reused
 	sqlDB.SetConnMaxLifetime(time.Hour)
-
-	// SetConnMaxIdleTime sets the maximum amount of time a connection may be idle
 	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
 
 	// Migrate the schema
-	if err := db.AutoMigrate(
+	if errMigrate := gormDB.AutoMigrate(
 		&models.Monitor{},
 		&models.MonitorHistory{},
 		&models.Incident{},
-	); err != nil {
-		return nil, fmt.Errorf("failed to migrate database schema: %w", err)
+	); errMigrate != nil {
+		return nil, fmt.Errorf("failed to migrate database schema: %w", errMigrate)
 	}
 
-	return &Database{DB: db}, nil
+	return &Database{DB: gormDB}, nil
 }
 
 func InitializeTestDatabase() (*Database, error) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		// NamingStrategy: schema.NamingStrategy{
-		// 	TablePrefix: "test_" + fmt.Sprint(time.Now().Unix()) + "_",
-		// },
-	})
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_journal_mode=WAL&_pragma=foreign_keys"))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -116,6 +109,34 @@ func (db *Database) UpsertRecord(record any, column string, updateColumn *[]stri
 
 func (db *Database) Upsert(record any) error {
 	return db.UpsertRecord(record, "id", nil)
+}
+
+func (db *Database) GetAllMonitors() ([]models.Monitor, error) {
+	var monitors []models.Monitor
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
+	if err := db.DB.Find(&monitors).Error; err != nil {
+		return nil, fmt.Errorf("failed to get all monitors: %w", err)
+	}
+	return monitors, nil
+}
+
+func (db *Database) GetMonitorWithHistories(url string, limit int) (*models.Monitor, error) {
+	var monitor models.Monitor
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
+	if err := db.DB.
+		Preload("Histories", func(db *gorm.DB) *gorm.DB {
+			return db.Order("monitor_histories.created_at DESC").Limit(limit)
+		}).
+		Where("url = ?", url).
+		Find(&monitor).Error; err != nil {
+		return nil, fmt.Errorf("failed to get monitor with histories for URL %s: %w", url, err)
+	}
+
+	return &monitor, nil
 }
 
 func (db *Database) GetLastIncident(url string, incidentType incident.Type) *models.Incident {
