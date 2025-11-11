@@ -66,7 +66,7 @@ func New(dbPath string) (*Database, error) {
 }
 
 func InitializeTestDatabase() (*Database, error) {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_journal_mode=WAL&_pragma=foreign_keys"))
+	db, err := gorm.Open(sqlite.Open("file::memory:?_journal_mode=WAL&_pragma=foreign_keys"))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
