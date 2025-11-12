@@ -1,0 +1,30 @@
+name: Create Tag
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cmd/version.go'
+
+jobs:
+  create-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(grep -o 'VERSION = "[^"]*"' cmd/version.go | grep -o '"[^"]*"' | tr -d '"')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git tag -a "v${{ steps.get_version.outputs.version }}" -m "Release v${{ steps.get_version.outputs.version }}"
+          git push origin "v${{ steps.get_version.outputs.version }}"

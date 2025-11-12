@@ -36,6 +36,11 @@ Example:
 		// Monitoring Section
 		configs := configuration.Config.Monitor
 
+		log.Debug().
+			Any("monitor", configs).
+			Str("master_url", configuration.Config.Agent.MasterHost).
+			Msg("configuration")
+
 		var urls []string
 
 		for _, r := range configs {

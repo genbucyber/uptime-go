@@ -14,7 +14,7 @@ builds:
       - arm64
     binary: uptime-go
     ldflags:
-      - -s -w -X uptime-go/internal/configuration.VERSION={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+      - -s -w -X uptime-go/cmd.VERSION={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
   - formats: ["tar.gz"]
