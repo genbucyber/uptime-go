@@ -15,6 +15,7 @@ const (
 	ExitErrorInvalidArgs = 1
 	ExitErrorConnection  = 2
 	ExitErrorConfig      = 3
+	VERSION              = "0.1.3"
 )
 
 var (
@@ -27,7 +28,7 @@ var (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:     "uptime-go",
-	Version: configuration.VERSION,
+	Version: VERSION,
 	Short:   "An application to check website uptime",
 	Long: `A command-line tool to monitor the uptime of websites.
 It provides continuous monitoring of websites defined in the configuration file.

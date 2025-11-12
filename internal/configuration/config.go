@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	VERSION            = "0.1.3"
 	OJTGUARDIAN_PATH   = "/etc/ojtguardian"
 	OJTGUARDIAN_CONFIG = OJTGUARDIAN_PATH + "/main.yml"
 )
@@ -85,25 +84,22 @@ func Load(configPath string) error {
 			return err
 		}
 
-		// File doesn't exist, create it with default values
-		monitorConfig.Set("monitor", []MonitorConfig{
-			{
-				URL:                   "https://genbucyber.com",
-				Enabled:               true,
-				Interval:              "5m",
-				ResponseTimeThreshold: "10s",
-			},
-		})
-
-		if err := monitorConfig.WriteConfig(); err != nil {
-			return err
-		}
+		log.Info().Msg("config file created with default site")
+		setDefaultMonitor(monitorConfig)
 	}
 
 	var rawMonitor []MonitorConfig
 
 	if err := monitorConfig.UnmarshalKey("monitor", &rawMonitor); err != nil {
 		return err
+	}
+
+	if len(rawMonitor) <= 0 {
+		log.Info().Msg("no sites to monitor, adding default site...")
+		setDefaultMonitor(monitorConfig)
+		if err := monitorConfig.UnmarshalKey("monitor", &rawMonitor); err != nil {
+			return err
+		}
 	}
 
 	// Parse
@@ -148,6 +144,23 @@ func UpdateConfig(configPath string, jsonConfig []byte) error {
 	err = os.WriteFile(configPath, yamlConfig, 0644)
 	if err != nil {
 		return fmt.Errorf("error writing YAML file: %w", err)
+	}
+
+	return nil
+}
+
+func setDefaultMonitor(v *viper.Viper) error {
+	v.Set("monitor", []MonitorConfig{
+		{
+			URL:                   "https://genbucyber.com",
+			Enabled:               true,
+			Interval:              "5m",
+			ResponseTimeThreshold: "10s",
+		},
+	})
+
+	if err := v.WriteConfig(); err != nil {
+		return err
 	}
 
 	return nil
