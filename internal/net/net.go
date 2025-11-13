@@ -48,6 +48,7 @@ func (nc *NetworkConfig) CheckWebsite() (*CheckResults, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", "GenbuUptimePlugin/0.2")
 
 	start := time.Now()
 	resp, err := client.Do(req)
