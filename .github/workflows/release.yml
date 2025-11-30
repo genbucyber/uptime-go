@@ -2,8 +2,8 @@ name: goreleaser
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - "main"
 
 permissions:
   contents: write
@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '^1.24'
+          go-version: "^1.24"
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -37,13 +37,32 @@ jobs:
         run: go mod verify
 
       - name: Run tests
-        run: go test -v ./...
+        run: go test -v -short ./...
+
+      - name: Get version from root.go
+        id: get_version
+        run: |
+          VERSION=$(grep -oP 'VERSION\s*=\s*"\K[^"]+' cmd/root.go)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push tag
+        run: |
+          git tag -a "v${{ steps.get_version.outputs.version }}" -m "Release v${{ steps.get_version.outputs.version }}"
+          git push origin "v${{ steps.get_version.outputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

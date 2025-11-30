@@ -111,7 +111,7 @@ func Load(configPath string) error {
 
 		URL := helper.NormalizeURL(monitor.URL)
 		interval := helper.ParseDuration(monitor.Interval, "5m")
-		timeout := helper.ParseDuration(monitor.ResponseTimeThreshold, "10s")
+		timeout := helper.ParseDuration(monitor.ResponseTimeThreshold, "30s")
 		certificateExpiredBefore := helper.ParseDuration(monitor.CertificateExpiredBefore, "31d")
 
 		Config.Monitor = append(Config.Monitor, &models.Monitor{

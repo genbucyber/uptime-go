@@ -21,10 +21,11 @@
       {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
+            air
             cobra-cli
             go
             gopls
-            air
+            goreleaser
           ];
 
           shellHooks = ''

@@ -5,28 +5,26 @@ before:
     - go mod tidy
 
 builds:
-  - env:
+  - id: uptime-go
+    main: ./main.go
+    binary: uptime-go
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
     goarch:
       - amd64
-      - arm64
-    binary: uptime-go
     ldflags:
       - -s -w -X uptime-go/cmd.VERSION={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
   - formats: ["tar.gz"]
     name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
+      {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
 
 checksum:
   name_template: "checksums.txt"
+  algorithm: sha256
 
 changelog:
   sort: asc
@@ -37,6 +35,18 @@ changelog:
       - "^chore:"
       - "^ci:"
       - "^Merge"
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w,)]*:+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w,)]*:+.*$"
+      order: 1
+    - title: 'Refactor'
+      regexp: "^.*refactor[(\\w,)]*:+.*$"
+      order: 3
+    - title: Others
+      order: 999
 
 release:
   draft: false

@@ -70,7 +70,7 @@ Example:
 		uptimeMonitor, err := monitor.NewUptimeMonitor(db, configs)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing monitor: %v\n", err)
-			os.Exit(ExitErrorConfig)
+			os.Exit(1)
 		}
 
 		go func() {

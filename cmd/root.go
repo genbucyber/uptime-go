@@ -9,13 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Constants for exit codes
-const (
-	ExitSuccess          = 0
-	ExitErrorInvalidArgs = 1
-	ExitErrorConnection  = 2
-	ExitErrorConfig      = 3
-)
+const VERSION = "0.2.0"
 
 var (
 	configPath   string
