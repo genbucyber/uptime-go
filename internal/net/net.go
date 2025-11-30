@@ -2,6 +2,8 @@ package net
 
 import (
 	"crypto/tls"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -63,7 +65,14 @@ func (nc *NetworkConfig) CheckWebsite() (*CheckResults, error) {
 	result.ResponseTime = responseTime
 
 	if err != nil {
-		result.ErrorMessage = err.Error()
+		var opErr *net.OpError
+		if errors.Is(err, io.EOF) {
+			result.ErrorMessage = fmt.Sprintf("Connection closed prematurely (EOF) while fetching %s. This might indicate a server issue or an incomplete response.", nc.URL)
+		} else if errors.As(err, &opErr) {
+			result.ErrorMessage = fmt.Sprintf("Network operation error for %s: %s. Check connectivity or target server status. Original error: %v", nc.URL, opErr.Op, opErr.Err)
+		} else {
+			result.ErrorMessage = fmt.Sprintf("Failed to fetch %s: %v", nc.URL, err)
+		}
 		return result, err
 	}
 	defer resp.Body.Close()
