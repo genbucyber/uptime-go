@@ -19,6 +19,7 @@ type Monitor struct {
 	ResponseTimeThreshold    time.Duration    `json:"-"`
 	CertificateMonitoring    bool             `json:"-"`
 	CertificateExpiredBefore *time.Duration   `json:"-"`
+	FollowRedirects          bool             `json:"-"`
 	IsUp                     *bool            `json:"is_up"`
 	StatusCode               *int             `json:"status_code"`
 	ResponseTime             *int64           `json:"response_time"`

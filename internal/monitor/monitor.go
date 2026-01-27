@@ -133,7 +133,7 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 		URL:                   monitor.URL,
 		RefreshInterval:       monitor.Interval,
 		Timeout:               monitor.ResponseTimeThreshold,
-		FollowRedirects:       true,
+		FollowRedirects:       monitor.FollowRedirects,
 		SkipSSL:               !monitor.CertificateMonitoring,
 		DNSTimeout:            monitor.DNSTimeout,
 		DialTimeout:           monitor.DialTimeout,
