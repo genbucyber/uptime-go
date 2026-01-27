@@ -27,15 +27,31 @@ func TestMonitorHandleWebsiteDown(t *testing.T) {
 	}{
 		{
 			name:                 "new timeout incident",
-			monitor:              models.Monitor{},
+			monitor:              models.Monitor{URL: "https://example.com"},
 			checkResult:          net.CheckResults{},
 			err:                  os.ErrDeadlineExceeded,
 			expectedResult:       true,
 			expectedIncidentType: incident.Timeout,
 		},
 		{
+			name:                 "new unexpected status incident",
+			monitor:              models.Monitor{URL: "https://example.com"},
+			checkResult:          net.CheckResults{StatusCode: http.StatusInternalServerError},
+			err:                  nil,
+			expectedResult:       true,
+			expectedIncidentType: incident.UnexpectedStatusCode,
+		},
+		{
+			name:                 "new unexpected error incident",
+			monitor:              models.Monitor{URL: "https://example.com"},
+			checkResult:          net.CheckResults{StatusCode: http.StatusInternalServerError},
+			err:                  errors.New("boom"),
+			expectedResult:       true,
+			expectedIncidentType: incident.UnexpectedStatusCode,
+		},
+		{
 			name:        "incident already exists",
-			monitor:     models.Monitor{},
+			monitor:     models.Monitor{URL: "https://example.com"},
 			checkResult: net.CheckResults{},
 			err:         errors.New(string(incident.UnexpectedStatusCode)),
 			setup: func(db *database.Database, monitor *models.Monitor) {
@@ -59,6 +75,78 @@ func TestMonitorHandleWebsiteDown(t *testing.T) {
 			result, incidentType := uptimeMonitor.handleWebsiteDown(&tc.monitor, &tc.checkResult, tc.err)
 			assert.Equal(t, tc.expectedResult, result)
 			assert.Equal(t, tc.expectedIncidentType, incidentType)
+		})
+	}
+}
+
+func TestDetermineStatus(t *testing.T) {
+	boolPtr := func(v bool) *bool {
+		return &v
+	}
+
+	testCases := []struct {
+		name            string
+		isCurrentUp     bool
+		monitor         models.Monitor
+		expectedStatus  string
+		expectedRetries int
+	}{
+		{
+			name:            "current up always up",
+			isCurrentUp:     true,
+			monitor:         models.Monitor{IsUp: boolPtr(false), Retries: 2, MaxRetries: 3},
+			expectedStatus:  incident.StatusUP,
+			expectedRetries: 2,
+		},
+		{
+			name:            "was up, retries remaining -> pending",
+			isCurrentUp:     false,
+			monitor:         models.Monitor{IsUp: boolPtr(true), Retries: 0, MaxRetries: 3},
+			expectedStatus:  incident.StatusPENDING,
+			expectedRetries: 1,
+		},
+		{
+			name:            "was up, retries exhausted -> down",
+			isCurrentUp:     false,
+			monitor:         models.Monitor{IsUp: boolPtr(true), Retries: 3, MaxRetries: 3},
+			expectedStatus:  incident.StatusDOWN,
+			expectedRetries: 3,
+		},
+		{
+			name:            "was down, still retrying -> pending",
+			isCurrentUp:     false,
+			monitor:         models.Monitor{IsUp: boolPtr(false), Retries: 1, MaxRetries: 3},
+			expectedStatus:  incident.StatusPENDING,
+			expectedRetries: 2,
+		},
+		{
+			name:            "was down, first failure with retries -> pending",
+			isCurrentUp:     false,
+			monitor:         models.Monitor{IsUp: boolPtr(false), Retries: 0, MaxRetries: 3},
+			expectedStatus:  incident.StatusPENDING,
+			expectedRetries: 1,
+		},
+		{
+			name:            "retries disabled -> down",
+			isCurrentUp:     false,
+			monitor:         models.Monitor{IsUp: boolPtr(false), Retries: 0, MaxRetries: 0},
+			expectedStatus:  incident.StatusDOWN,
+			expectedRetries: 0,
+		},
+		{
+			name:            "retries exhausted -> down",
+			isCurrentUp:     false,
+			monitor:         models.Monitor{IsUp: boolPtr(false), Retries: 3, MaxRetries: 3},
+			expectedStatus:  incident.StatusDOWN,
+			expectedRetries: 3,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			status := determineStatus(tc.isCurrentUp, &tc.monitor)
+			assert.Equal(t, tc.expectedStatus, status)
+			assert.Equal(t, tc.expectedRetries, tc.monitor.Retries)
 		})
 	}
 }
@@ -220,6 +308,10 @@ func TestHandleSSL(t *testing.T) {
 }
 
 func TestCheckWebsite(t *testing.T) {
+	boolPtr := func(v bool) *bool {
+		return &v
+	}
+
 	t.Run("website is up", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -270,5 +362,33 @@ func TestCheckWebsite(t *testing.T) {
 		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.UnexpectedStatusCode)
 		assert.True(t, lastIncident.IsExists())
 		assert.Equal(t, "Received non-successful status code: 500 Internal Server Error", lastIncident.Description)
+	})
+
+	t.Run("website pending with retries", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+		monitor := &models.Monitor{
+			URL:                   server.URL,
+			Interval:              1 * time.Minute,
+			ResponseTimeThreshold: 5 * time.Second,
+			MaxRetries:            2,
+			RetryInterval:         1 * time.Second,
+			IsUp:                  boolPtr(true),
+		}
+		db.DB.Create(monitor)
+
+		uptimeMonitor.checkWebsite(monitor)
+
+		db.DB.First(monitor)
+		assert.False(t, *monitor.IsUp)
+		assert.Equal(t, 1, monitor.Retries)
+
+		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.UnexpectedStatusCode)
+		assert.True(t, lastIncident.IsNotExists())
 	})
 }
