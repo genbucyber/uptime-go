@@ -156,6 +156,16 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 	// Determine new status based on check result
 	newStatus := determineStatus(result.IsUp, monitor)
 
+	if !result.IsUp && result.ErrorMessage == "" {
+		if result.StatusCode != 0 {
+			result.ErrorMessage = fmt.Sprintf("Received status code: %d %s", result.StatusCode, http.StatusText(result.StatusCode))
+		} else if err != nil {
+			result.ErrorMessage = err.Error()
+		} else {
+			result.ErrorMessage = "Unknown error"
+		}
+	}
+
 	now := time.Now()
 	if newStatus == incident.StatusUP {
 		// Website is UP
