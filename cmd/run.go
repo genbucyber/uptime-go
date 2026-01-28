@@ -63,6 +63,13 @@ Example:
 			"interval",
 			"certificate_monitoring",
 			"certificate_expired_before",
+			"follow_redirects",
+			"max_retries",
+			"retry_interval",
+			"dns_timeout",
+			"dial_timeout",
+			"tls_handshake_timeout",
+			"response_header_timeout",
 		})
 		db.DB.Where("url IN ?", urls).Find(&configs)
 
