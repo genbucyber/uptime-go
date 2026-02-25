@@ -12,6 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var durationRegex = regexp.MustCompile(`(\d+)([smhd])`)
+
 func GenerateRandomID() string {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
@@ -23,21 +25,21 @@ func GenerateRandomID() string {
 }
 
 func ParseDuration(input string, defaultValue string) time.Duration {
-	re := regexp.MustCompile(`(\d+)([smhd])`)
-	matches := re.FindAllStringSubmatch(input, -1)
+	if input == "" {
+		return 0
+	}
 
-	if len(matches) == 0 && defaultValue != "" {
-		log.Warn().Msgf("invalid duration string: '%s'", input)
-		log.Warn().Msgf("using default value: %s", defaultValue)
+	matches := durationRegex.FindAllStringSubmatch(input, -1)
+
+	if len(matches) == 0 {
 		return ParseDuration(defaultValue, "")
 	}
 
 	var total time.Duration
 	for _, match := range matches {
 		value, _ := strconv.Atoi(match[1])
-		unit := match[2]
 
-		switch unit {
+		switch match[2] {
 		case "s":
 			total += time.Duration(value) * time.Second
 		case "m":
@@ -62,7 +64,7 @@ func NormalizeURL(rawURL string) string {
 
 	// Add default scheme if missing
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
-		rawURL = "https://" + rawURL
+		rawURL = "http://" + rawURL
 	}
 
 	parsedURL, err := url.Parse(rawURL)

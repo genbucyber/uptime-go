@@ -151,9 +151,9 @@ func TestCheckWebsiteIPv4Only(t *testing.T) {
 
 	url := "http://" + listener.Addr().String()
 	nc := NetworkConfig{
-		URL:       url,
-		Timeout:   5 * time.Second,
-		IPType:    "ipv4",
+		URL:     url,
+		Timeout: 5 * time.Second,
+		IPType:  "ipv4",
 	}
 
 	results, err := nc.CheckWebsite()
@@ -186,9 +186,9 @@ func TestCheckWebsiteIPv6Only(t *testing.T) {
 	addr := listener.Addr().(*net.TCPAddr)
 	url := fmt.Sprintf("http://[%s]:%d", addr.IP.String(), addr.Port)
 	nc := NetworkConfig{
-		URL:       url,
-		Timeout:   5 * time.Second,
-		IPType:    "ipv6",
+		URL:     url,
+		Timeout: 5 * time.Second,
+		IPType:  "ipv6",
 	}
 
 	results, err := nc.CheckWebsite()

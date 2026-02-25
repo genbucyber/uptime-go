@@ -8,8 +8,8 @@ import (
 	"uptime-go/internal/api"
 	"uptime-go/internal/configuration"
 	"uptime-go/internal/helper"
-	"uptime-go/internal/monitor"
 	"uptime-go/internal/models"
+	"uptime-go/internal/monitor"
 	"uptime-go/internal/net"
 	"uptime-go/internal/net/database"
 
@@ -75,6 +75,7 @@ Example:
 			"tls_handshake_timeout",
 			"response_header_timeout",
 		})
+
 		db.DB.Where("url IN ?", urls).Find(&configs)
 		for _, cfg := range configs {
 			src, ok := configByURL[cfg.URL]

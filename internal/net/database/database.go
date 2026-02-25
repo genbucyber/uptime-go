@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -123,32 +124,73 @@ func (db *Database) Upsert(record any) error {
 	return db.UpsertRecord(record, "id", nil)
 }
 
-func (db *Database) GetAllMonitors() ([]models.Monitor, error) {
+func (db *Database) GetMonitors(urls []string) ([]models.Monitor, error) {
 	var monitors []models.Monitor
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
 
-	if err := db.DB.Find(&monitors).Error; err != nil {
-		return nil, fmt.Errorf("failed to get all monitors: %w", err)
+	if err := db.DB.
+		Where("url IN ?", urls).
+		Find(&monitors).Error; err != nil {
+		return nil, fmt.Errorf("failed to get monitors by config URLs: %w", err)
 	}
+
 	return monitors, nil
 }
 
-func (db *Database) GetMonitorWithHistories(url string, limit int) (*models.Monitor, error) {
+func (db *Database) GetMonitorHistories(url string, limit int, from time.Time, to time.Time) (*models.Monitor, error) {
 	var monitor models.Monitor
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
 
-	if err := db.DB.
+	err := db.DB.
 		Preload("Histories", func(db *gorm.DB) *gorm.DB {
-			return db.Order("monitor_histories.created_at DESC").Limit(limit)
+			query := db.Order("monitor_histories.created_at DESC")
+
+			if !from.IsZero() && !to.IsZero() {
+				query = query.Where("created_at BETWEEN ? AND ?", from, to)
+			}
+
+			if limit > 0 {
+				query = query.Limit(limit)
+			}
+
+			return query
 		}).
 		Where("url = ?", url).
-		Find(&monitor).Error; err != nil {
+		First(&monitor).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("failed to get monitor with histories for URL %s: %w", url, err)
 	}
 
 	return &monitor, nil
+}
+
+func (db *Database) GetHistoryWithMonitor(urls []string, from, to time.Time) (map[string][]models.MonitorHistory, error) {
+	allHistories := make([]models.MonitorHistory, 0)
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
+	if err := db.DB.
+		Preload("Monitor").
+		Joins("JOIN monitors ON monitors.id = monitor_histories.monitor_id").
+		Where("monitors.url IN ? AND monitor_histories.created_at BETWEEN ? AND ?", urls, from, to).
+		Order("monitors.url ASC, monitor_histories.created_at ASC").
+		Find(&allHistories).Error; err != nil {
+		return nil, fmt.Errorf("failed to get monitor histories for URLs %v in date range %s to %s: %w", urls, from, to, err)
+	}
+
+	histories := make(map[string][]models.MonitorHistory)
+	for _, history := range allHistories {
+		histories[history.Monitor.URL] = append(histories[history.Monitor.URL], history)
+	}
+
+	return histories, nil
 }
 
 func (db *Database) GetLastIncident(url string, incidentType incident.Type) *models.Incident {
