@@ -74,11 +74,11 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/health", s.HealthCheckHandler)
 
 	api := s.router.Group("/api/uptime-go")
-	// api.GET("/config")
 	api.POST("/config", s.UpdateConfigHandler)
 
 	reportGroup := api.Group("/reports")
-	reportGroup.GET("", s.GetMonitoringReport)
+	reportGroup.GET("/", s.GetMonitoringReport)
+	reportGroup.GET("/history", s.GetMonitoringHistoryReport)
 }
 
 func accessLogger() gin.HandlerFunc {
