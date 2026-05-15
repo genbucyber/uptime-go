@@ -248,7 +248,15 @@ func (m *UptimeMonitor) handleWebsiteDown(monitor *models.Monitor, result *net.C
 			incidentType = incident.Timeout
 			result.ResponseTime = monitor.ResponseTimeThreshold
 			if description == "" {
-				description = fmt.Sprintf("Request timed out after %v: %s", monitor.ResponseTimeThreshold, monitor.URL)
+				nc := &net.NetworkConfig{
+					URL:                   monitor.URL,
+					Timeout:               monitor.ResponseTimeThreshold,
+					DNSTimeout:            monitor.DNSTimeout,
+					DialTimeout:           monitor.DialTimeout,
+					TLSHandshakeTimeout:   monitor.TLSHandshakeTimeout,
+					ResponseHeaderTimeout: monitor.ResponseHeaderTimeout,
+				}
+				description = nc.CategorizeError(err)
 			}
 		} else {
 			if description == "" {
