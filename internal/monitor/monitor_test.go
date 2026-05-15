@@ -1,10 +1,12 @@
 package monitor
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 	"uptime-go/internal/incident"
@@ -77,6 +79,46 @@ func TestMonitorHandleWebsiteDown(t *testing.T) {
 			assert.Equal(t, tc.expectedIncidentType, incidentType)
 		})
 	}
+}
+
+func TestMonitorHandleWebsiteDownUsesClearTimeoutDescription(t *testing.T) {
+	db, _ := database.InitializeTestDatabase()
+	uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+	monitor := models.Monitor{
+		ID:                    "monitor-1",
+		URL:                   "https://example.com",
+		ResponseTimeThreshold: 30 * time.Second,
+	}
+	checkResult := net.CheckResults{}
+
+	created, incidentType := uptimeMonitor.handleWebsiteDown(&monitor, &checkResult, context.DeadlineExceeded)
+	assert.True(t, created)
+	assert.Equal(t, incident.Timeout, incidentType)
+
+	lastIncident := db.GetLastIncident(monitor.URL, incident.Timeout)
+	assert.True(t, lastIncident.IsExists())
+	assert.Contains(t, lastIncident.Description, "Overall request timeout after 30s for https://example.com")
+	assert.Contains(t, lastIncident.Description, "response_time_threshold")
+	assert.False(t, strings.Contains(lastIncident.Description, "Request timed out:"))
+}
+
+func TestMonitorHandleWebsiteDownKeepsExistingErrorMessage(t *testing.T) {
+	db, _ := database.InitializeTestDatabase()
+	uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+	monitor := models.Monitor{
+		ID:                    "monitor-1",
+		URL:                   "https://example.com",
+		ResponseTimeThreshold: 30 * time.Second,
+	}
+	checkResult := net.CheckResults{ErrorMessage: "custom timeout details"}
+
+	created, incidentType := uptimeMonitor.handleWebsiteDown(&monitor, &checkResult, context.DeadlineExceeded)
+	assert.True(t, created)
+	assert.Equal(t, incident.Timeout, incidentType)
+
+	lastIncident := db.GetLastIncident(monitor.URL, incident.Timeout)
+	assert.True(t, lastIncident.IsExists())
+	assert.Equal(t, "custom timeout details", lastIncident.Description)
 }
 
 func TestDetermineStatus(t *testing.T) {

@@ -1,10 +1,12 @@
 package net
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -100,6 +102,81 @@ func TestCheckWebsiteErrorMessages(t *testing.T) {
 	}
 }
 
+func TestCategorizeErrorUsesClearTimeoutMessages(t *testing.T) {
+	nc := NetworkConfig{
+		URL:                   "https://example.com",
+		Timeout:               30 * time.Second,
+		DNSTimeout:            5 * time.Second,
+		DialTimeout:           10 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 20 * time.Second,
+	}
+
+	tests := []struct {
+		name         string
+		err          error
+		wantContains []string
+	}{
+		{
+			name: "overall timeout",
+			err:  context.DeadlineExceeded,
+			wantContains: []string{
+				"Overall request timeout after 30s for https://example.com",
+				"response_time_threshold",
+			},
+		},
+		{
+			name: "url timeout fallback",
+			err:  &url.Error{Op: "Get", URL: "https://example.com", Err: context.DeadlineExceeded},
+			wantContains: []string{
+				"Overall request timeout after 30s for https://example.com",
+				"response_time_threshold",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := nc.CategorizeError(tt.err)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(msg, want) {
+					t.Fatalf("expected %q to contain %q", msg, want)
+				}
+			}
+			if strings.Contains(msg, "URL request timeout") || strings.Contains(msg, "Request timed out:") {
+				t.Fatalf("expected clear timeout message, got %q", msg)
+			}
+		})
+	}
+}
+
+func TestCheckWebsiteTimeoutMessageIsActionable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	nc := NetworkConfig{
+		URL:     server.URL,
+		Timeout: 10 * time.Millisecond,
+	}
+
+	results, err := nc.CheckWebsite()
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if results == nil {
+		t.Fatal("expected results")
+	}
+	if !strings.Contains(results.ErrorMessage, "Overall request timeout after 10ms") {
+		t.Fatalf("expected overall timeout message, got %q", results.ErrorMessage)
+	}
+	if !strings.Contains(results.ErrorMessage, "response_time_threshold") {
+		t.Fatalf("expected actionable config hint, got %q", results.ErrorMessage)
+	}
+}
+
 func TestCheckWebsiteSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -151,9 +228,9 @@ func TestCheckWebsiteIPv4Only(t *testing.T) {
 
 	url := "http://" + listener.Addr().String()
 	nc := NetworkConfig{
-		URL:       url,
-		Timeout:   5 * time.Second,
-		IPType:    "ipv4",
+		URL:     url,
+		Timeout: 5 * time.Second,
+		IPType:  "ipv4",
 	}
 
 	results, err := nc.CheckWebsite()
@@ -186,9 +263,9 @@ func TestCheckWebsiteIPv6Only(t *testing.T) {
 	addr := listener.Addr().(*net.TCPAddr)
 	url := fmt.Sprintf("http://[%s]:%d", addr.IP.String(), addr.Port)
 	nc := NetworkConfig{
-		URL:       url,
-		Timeout:   5 * time.Second,
-		IPType:    "ipv6",
+		URL:     url,
+		Timeout: 5 * time.Second,
+		IPType:  "ipv6",
 	}
 
 	results, err := nc.CheckWebsite()

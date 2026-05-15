@@ -1,20 +1,17 @@
 package models
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 	"uptime-go/internal/helper"
 	"uptime-go/internal/incident"
 
-	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
 type Monitor struct {
 	ID                       string           `json:"-" gorm:"primaryKey"`
 	URL                      string           `json:"url" gorm:"unique"`
-	Enabled                  bool             `json:"-"`
+	Enabled                  bool             `json:"enabled"`
 	Interval                 time.Duration    `json:"-"`
 	ResponseTimeThreshold    time.Duration    `json:"-"`
 	CertificateMonitoring    bool             `json:"-"`
@@ -23,7 +20,7 @@ type Monitor struct {
 	IPType                   string           `json:"-"`
 	IsUp                     *bool            `json:"is_up"`
 	StatusCode               *int             `json:"status_code"`
-	ResponseTime             *int64           `json:"response_time"`
+	ResponseTime             *int64           `json:"response_time"` // in milliseconds
 	CertificateExpiredDate   *time.Time       `json:"certificate_expired_date"`
 	LastUp                   *time.Time       `json:"last_up"`
 	LastDown                 *time.Time       `json:"last_down"`
@@ -65,11 +62,6 @@ type Incident struct {
 	Monitor     Monitor       `gorm:"foreignKey:MonitorID"`
 }
 
-type Response struct {
-	Message string `json:"message"`
-	Data    any    `json:"data,omitempty"`
-}
-
 func (h *MonitorHistory) BeforeCreate(tx *gorm.DB) (err error) {
 	h.ID = helper.GenerateRandomID()
 
@@ -94,15 +86,4 @@ func (i Incident) IsNotExists() bool {
 
 func (i Incident) IsSolved() bool {
 	return i.SolvedAt != nil
-}
-
-func (r Response) Print() {
-	data, err := json.Marshal(r)
-
-	if err != nil {
-		log.Error().Err(err).Msg("error serializing response")
-		return
-	}
-
-	fmt.Println(string(data))
 }
