@@ -93,9 +93,10 @@ func Load(configPath string) error {
 	syncPath := filepath.Join(filepath.Dir(configPath), "sync.yml")
 	syncContent := `datasets:
   		- name: monitors
-    endpoint: reports
-    key: [url]
+		endpoint: reports
+		key: [url]
 	`
+	
 	if err := os.WriteFile(syncPath, []byte(syncContent), 0644); err != nil {
 		log.Warn().Err(err).Str("path", syncPath).Msg("failed to write sync manifest")
 	} else {
