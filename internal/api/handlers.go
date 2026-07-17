@@ -57,6 +57,27 @@ func (s *Server) UpdateConfigHandler(c *gin.Context) {
 }
 
 func (s *Server) GetMonitoringReport(c *gin.Context) {
+	url := c.Query("url")
+	if url != ""{
+		monitor, err := s.db.GetMonitorHistories(url, 100, time.Time{}, time.Time{})
+		if err != nil{
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"message": "Failed to retrieve monitor history",
+				"error": err.Error(),
+			})
+			return
+		}
+
+		if monitor == nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"message" : "Record not found for the given url",
+			})
+			return
+		}
+		c.JSON(http.StatusOK, monitor)
+		return
+	}
+
 	var params ReportQueryParams
 
 	if err := c.ShouldBindQuery(&params); err != nil {
