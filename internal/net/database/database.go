@@ -130,6 +130,9 @@ func (db *Database) GetMonitors(urls []string) ([]models.Monitor, error) {
 	defer db.mutex.RUnlock()
 
 	if err := db.DB.
+		Preload("Histories", func(db *gorm.DB) *gorm.DB {
+			return db.Order("monitor_histories.created_at DESC").Limit(100)
+		}).
 		Where("url IN ?", urls).
 		Find(&monitors).Error; err != nil {
 		return nil, fmt.Errorf("failed to get monitors by config URLs: %w", err)

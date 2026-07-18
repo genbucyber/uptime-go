@@ -3,6 +3,7 @@ package api
 import (
 	"io"
 	"net/http"
+	"os"
 	"time"
 	"uptime-go/internal/configuration"
 	"uptime-go/internal/models"
@@ -53,7 +54,13 @@ func (s *Server) UpdateConfigHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Configuration updated successfully. Please restart the application to apply changes."})
+	c.JSON(http.StatusOK, gin.H{"message": "Configuration updated. Systemd will restart the service to apply changes."})
+
+	go func() {                                                             
+        time.Sleep(1 * time.Second)                                             
+        log.Info().Msg("Exiting to trigger systemd auto-restart...")            
+        os.Exit(1)                                                              
+    }() 
 }
 
 func (s *Server) GetMonitoringReport(c *gin.Context) {
