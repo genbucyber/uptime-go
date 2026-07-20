@@ -2,3 +2,5 @@ datasets:
   - name: monitors
     endpoint: reports
     key: [url]
+    params:
+      with_stat: true
