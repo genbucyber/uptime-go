@@ -45,7 +45,7 @@ type MonitorHistory struct {
 	ID           string    `json:"-" gorm:"primaryKey"`
 	MonitorID    string    `json:"-" gorm:"index"`
 	IsUp         bool      `json:"is_up" gorm:"index"`
-	StatusCode   int       `json:"-"`
+	StatusCode   int       `json:"status_code"`
 	ResponseTime int64     `json:"response_time"` // in milliseconds
 	CreatedAt    time.Time `json:"created_at" gorm:"index"`
 	Monitor      Monitor   `json:"-" gorm:"foreignKey:MonitorID"`
