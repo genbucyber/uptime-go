@@ -89,20 +89,6 @@ func Load(configPath string) error {
 		return err
 	}
 
-	syncPath := filepath.Join(filepath.Dir(configPath), "sync.yml")
-	configsSyncPath := filepath.Join("configs", "sync.yml")
-	
-	syncContent, err := os.ReadFile(configsSyncPath)
-	if err != nil {
-		log.Warn().Err(err).Str("path", configsSyncPath).Msg("failed to read sync.yml from configs folder")
-	} else {
-		if err := os.WriteFile(syncPath, syncContent, 0644); err != nil {
-			log.Warn().Err(err).Str("path", syncPath).Msg("failed to write sync manifest")
-		} else {
-			log.Info().Str("path", syncPath).Msg("sync manifest written successfully")
-		}
-	}
-
 	monitorConfig := viper.New()
 	monitorConfig.SetConfigFile(configPath)
 	monitorConfig.SetConfigType("yml")
