@@ -28,6 +28,7 @@ type MonitorResponse struct {
 	CertificateExpiredDate   *time.Time `json:"certificate_expired_date,omitempty"`
 	CertificateRemainingDays *int       `json:"certificate_remaining_days,omitempty"`
 
+	LastUp    *time.Time `json:"last_up,omitempty"`
 	LastDown  *time.Time `json:"last_down,omitempty"`
 	LastCheck time.Time  `json:"last_check"`
 
@@ -319,6 +320,7 @@ func buildMonitorResponse(m models.Monitor, dailyStats []MonitorDailyUptimeStats
 		CertificateExpiration: 		certExpiration,    
 		CertificateExpiredDate: 	m.CertificateExpiredDate,
 		CertificateRemainingDays: 	certRemainingDays,
+		LastUp:						m.LastUp,
 		LastDown: 					m.LastDown,
 		LastCheck: 					m.UpdatedAt,
 		DailyStats: 				dailyStats,
