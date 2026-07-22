@@ -33,7 +33,13 @@ It loads websites from the configuration and continuously checks their uptime.
 Use this command to start the monitoring service.
 Example:
   uptime-go run --config /path/to/your/config.yml`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := configuration.Load(configPath); err != nil {
+			return err
+		}
+		return nil
+	},
+ 	 RunE: func(cmd *cobra.Command, args []string) error {
 		// Monitoring Section
 		configs := configuration.Config.Monitor
 
