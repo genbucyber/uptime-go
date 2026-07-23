@@ -301,6 +301,11 @@ func buildMonitorResponse(m models.Monitor, dailyStats []MonitorDailyUptimeStats
 		responseTimeVal = *m.ResponseTime
 	}
 
+	isUpVa := false
+	if m.IsUp != nil {
+		isUpVa = *m.IsUp
+	}
+
 	var certExpiration *string                                   
     var certRemainingDays *int
 
@@ -314,7 +319,7 @@ func buildMonitorResponse(m models.Monitor, dailyStats []MonitorDailyUptimeStats
 	return MonitorResponse{
 		URL: 						m.URL,
 		Enabled: 					m.Enabled,       
-		IsUp: 						*m.IsUp,  
+		IsUp: 						isUpVa,  
 		StatusCode: 				statusCodeVal,
 		ResponseTime: 				responseTimeVal,
 		CertificateExpiration: 		certExpiration,    
