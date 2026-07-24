@@ -112,10 +112,16 @@ func (s *Server) GetMonitoringReport(c *gin.Context) {
 			now := time.Now().UTC()
 			today := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, now.Location())
 			ninetyDaysAgo := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location()).AddDate(0, 0, -89)
-			histories, err := s.db.GetHistoryWithMonitor([]string{monitor.URL}, ninetyDaysAgo, today)
+			
+			stats, err := s.db.GetDailyStats([]string{monitor.URL}, ninetyDaysAgo, today)
 			if err != nil {
-				dailyStats = calculateUptimeStats(histories[monitor.URL], ninetyDaysAgo, today)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"message": "Failed to retrieve monitor histories for stats calculation",
+					"error": err.Error(),
+				})
+				return
 			}
+			dailyStats = calculateUptimeStats(stats[monitor.URL], ninetyDaysAgo, today)
 		}
 		c.JSON(http.StatusOK, buildMonitorResponse(*monitor, dailyStats))
 		return
@@ -144,7 +150,7 @@ func (s *Server) GetMonitoringReport(c *gin.Context) {
 		return
 	}
 
-	var dailyStatsMap map[string][]models.MonitorHistory
+	var dailyStatsMap map[string][]models.DailyStat
 	var ninetyDaysAgo, today time.Time  
 
 	if params.WithStat {
@@ -158,7 +164,7 @@ func (s *Server) GetMonitoringReport(c *gin.Context) {
 			monitorURLs = append(monitorURLs, m.URL)
 		}
 
-		dailyStatsMap, err = s.db.GetHistoryWithMonitor(monitorURLs, ninetyDaysAgo, today)
+		dailyStatsMap, err = s.db.GetDailyStats(monitorURLs, ninetyDaysAgo, today)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"message": "Failed to retrieve monitor histories for stats calculation", 
@@ -241,49 +247,34 @@ func (s *Server) GetMonitoringHistoryReport(c *gin.Context) {
 	c.JSON(http.StatusOK, buildMonitorResponse(*monitor, nil))
 }
 
-func calculateUptimeStats(histories []models.MonitorHistory, from, to time.Time) []MonitorDailyUptimeStats {
-	dailyStatsMap := make(map[string]struct {
-		UpCount    int
-		TotalCount int
-	})
+func calculateUptimeStats(stats []models.DailyStat, from, to time.Time) []MonitorDailyUptimeStats {
+	dailyStatsMap := make(map[string]models.DailyStat)
 
-	for d := from; !d.After(to); d = d.Add(24 * time.Hour) {
-		dateStr := d.Format("2006-01-02")
-		dailyStatsMap[dateStr] = struct {
-			UpCount    int
-			TotalCount int
-		}{UpCount: 0, TotalCount: 0}
-	}
-
-	for _, history := range histories {
-		dateStr := history.CreatedAt.Format("2006-01-02")
-		stats := dailyStatsMap[dateStr]
-		stats.TotalCount++
-		if history.IsUp {
-			stats.UpCount++
-		}
-		dailyStatsMap[dateStr] = stats
+	for _, stat := range stats {
+		dailyStatsMap[stat.Date] = stat
 	}
 
 	var result []MonitorDailyUptimeStats
 	for d := from; !d.After(to); d = d.Add(24 * time.Hour) {
 		dateStr := d.Format("2006-01-02")
-		stats := dailyStatsMap[dateStr]
+		stat, exits := dailyStatsMap[dateStr]
 		uptimePercentage := 0.0
-		if stats.TotalCount > 0 {
-			uptimePercentage = (float64(stats.UpCount) / float64(stats.TotalCount)) * 100
-			uptimePercentage = math.Round(uptimePercentage*100) / 100
+		totalChecks := 0
+		
+		if exits && stat.TotalChecks > 0 {
+			totalChecks = stat.TotalChecks
+			uptimePercentage = (float64(stat.UpChecks) / float64(stat.TotalChecks)) * 100
+			uptimePercentage = math.Round(uptimePercentage * 100) / 100
 		}
 
 		result = append(result, MonitorDailyUptimeStats{
 			Date:             dateStr,
 			UptimePercentage: uptimePercentage,
-			TotalChecks:      stats.TotalCount,
+			TotalChecks:      totalChecks,
 		})
 	}
 
-	// If no histories at all, return nil to omit "stats" field in JSON response
-	if len(histories) == 0 {
+	if len(stats) == 0 {
 		return nil
 	}
 
