@@ -62,6 +62,12 @@ type Incident struct {
 	Monitor     Monitor       `gorm:"foreignKey:MonitorID"`
 }
 
+type DailyStat struct{
+	Date 		string
+	TotalChecks int
+	UpChecks 	int
+}
+
 func (h *MonitorHistory) BeforeCreate(tx *gorm.DB) (err error) {
 	h.ID = helper.GenerateRandomID()
 

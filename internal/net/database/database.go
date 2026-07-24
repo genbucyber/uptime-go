@@ -130,12 +130,22 @@ func (db *Database) GetMonitors(urls []string) ([]models.Monitor, error) {
 	defer db.mutex.RUnlock()
 
 	if err := db.DB.
-		Preload("Histories", func(db *gorm.DB) *gorm.DB {
-			return db.Order("monitor_histories.created_at DESC").Limit(100)
-		}).
 		Where("url IN ?", urls).
 		Find(&monitors).Error; err != nil {
 		return nil, fmt.Errorf("failed to get monitors by config URLs: %w", err)
+	}
+
+	for i := range monitors {
+		var histories []models.MonitorHistory
+
+		if err := db.DB.
+			Where("monitor_id = ?", monitors[i].ID).
+			Order("created_at DESC").
+			Limit(100).
+			Find(&histories).Error; err != nil {
+				return nil, fmt.Errorf("failed to get histories for monitor %s: %w", monitors[i].URL, err)
+			}
+		monitors[i].Histories = histories
 	}
 
 	return monitors, nil
@@ -174,27 +184,58 @@ func (db *Database) GetMonitorHistories(url string, limit int, from time.Time, t
 	return &monitor, nil
 }
 
-func (db *Database) GetHistoryWithMonitor(urls []string, from, to time.Time) (map[string][]models.MonitorHistory, error) {
-	allHistories := make([]models.MonitorHistory, 0)
-	db.mutex.RLock()
-	defer db.mutex.RUnlock()
+func (db *Database) GetDailyStats(urls []string, from, to time.Time) (map[string][]models.DailyStat, error){
+	type DailyStatRow struct {                                              
+            URL         string `gorm:"column:url"`                                  
+            Date        string `gorm:"column:date"`                                 
+            TotalChecks int    `gorm:"column:total_checks"`                         
+            UpChecks    int    `gorm:"column:up_checks"`                            
+    }                    
 
-	if err := db.DB.
-		Preload("Monitor").
-		Joins("JOIN monitors ON monitors.id = monitor_histories.monitor_id").
-		Where("monitors.url IN ? AND monitor_histories.created_at BETWEEN ? AND ?", urls, from, to).
-		Order("monitors.url ASC, monitor_histories.created_at ASC").
-		Find(&allHistories).Error; err != nil {
-		return nil, fmt.Errorf("failed to get monitor histories for URLs %v in date range %s to %s: %w", urls, from, to, err)
-	}
+    var rows []DailyStatRow                                                 
+    db.mutex.RLock()                                                        
+    defer db.mutex.RUnlock()
 
-	histories := make(map[string][]models.MonitorHistory)
-	for _, history := range allHistories {
-		histories[history.Monitor.URL] = append(histories[history.Monitor.URL], history)
-	}
+	err := db.DB.Model(&models.MonitorHistory{}).                           
+            Select("monitors.url AS url, date(monitor_histories.created_at) AS date, COUNT(*) AS total_checks, SUM(CASE WHEN monitor_histories.is_up = 1 THEN 1 ELSE 0 END) AS up_checks").Joins("JOIN monitors ON monitors.id = monitor_histories.monitor_id").Where("monitors.url IN ? AND monitor_histories.created_at BETWEEN ? AND ?", urls, from, to).Group("url, date").Order("url ASC, date ASC").Scan(&rows).Error                                                       
 
-	return histories, nil
+        if err != nil {                                                         
+            return nil, fmt.Errorf("failed to get daily stats: %w", err)            
+        }                                                                       
+        
+        result := make(map[string][]models.DailyStat)                           
+        for _, r := range rows {                                                
+            result[r.URL] = append(result[r.URL], models.DailyStat{                 
+                Date:        r.Date,                                                    
+                TotalChecks: r.TotalChecks,                                             
+                UpChecks:    r.UpChecks,                                                
+            })                                                                      
+        }                                                                       
+        
+        return result, nil
 }
+
+// func (db *Database) GetHistoryWithMonitor(urls []string, from, to time.Time) (map[string][]models.MonitorHistory, error) {
+// 	allHistories := make([]models.MonitorHistory, 0)
+// 	db.mutex.RLock()
+// 	defer db.mutex.RUnlock()
+
+// 	if err := db.DB.
+// 		Preload("Monitor").
+// 		Joins("JOIN monitors ON monitors.id = monitor_histories.monitor_id").
+// 		Where("monitors.url IN ? AND monitor_histories.created_at BETWEEN ? AND ?", urls, from, to).
+// 		Order("monitors.url ASC, monitor_histories.created_at ASC").
+// 		Find(&allHistories).Error; err != nil {
+// 		return nil, fmt.Errorf("failed to get monitor histories for URLs %v in date range %s to %s: %w", urls, from, to, err)
+// 	}
+
+// 	histories := make(map[string][]models.MonitorHistory)
+// 	for _, history := range allHistories {
+// 		histories[history.Monitor.URL] = append(histories[history.Monitor.URL], history)
+// 	}
+
+// 	return histories, nil
+// }
 
 func (db *Database) GetLastIncident(url string, incidentType incident.Type) *models.Incident {
 	var incident models.Incident
