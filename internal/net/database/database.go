@@ -135,13 +135,14 @@ func (db *Database) GetMonitors(urls []string) ([]models.Monitor, error) {
 		return nil, fmt.Errorf("failed to get monitors by config URLs: %w", err)
 	}
 
+	ninetyDaysAgo := time.Now().AddDate(0,0, -90)
+
 	for i := range monitors {
 		var histories []models.MonitorHistory
 
 		if err := db.DB.
-			Where("monitor_id = ?", monitors[i].ID).
+			Where("monitor_id = ? AND created_at >= ?", monitors[i].ID, ninetyDaysAgo).
 			Order("created_at DESC").
-			Limit(100).
 			Find(&histories).Error; err != nil {
 				return nil, fmt.Errorf("failed to get histories for monitor %s: %w", monitors[i].URL, err)
 			}
