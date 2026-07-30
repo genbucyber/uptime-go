@@ -8,6 +8,7 @@ import (
 	"strings"
 	"uptime-go/internal/helper"
 	"uptime-go/internal/models"
+	"uptime-go/internal/net/database"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -62,6 +63,7 @@ func GetIncidentStatusURL(id uint64) string {
 }
 
 func Load(configPath string) error {
+	Config.Monitor = nil
 	// Load agent config
 	agentConfig := viper.New()
 	agentConfig.SetConfigFile(OJTGUARDIAN_CONFIG)
@@ -229,4 +231,72 @@ func normalizeIPType(raw string) string {
 	default:
 		return ""
 	}
+}
+
+func SyncMonitorsWithDB(db *database.Database, configs []*models.Monitor) ([]*models.Monitor, error) {
+	var urls []string
+	configByUrl := make(map[string]models.Monitor, len(configs))
+
+	for _, r := range configs {
+		if r.ID == "" {
+			r.ID = helper.GenerateRandomID()
+		}
+
+		urls = append(urls, r.URL)
+		configByUrl[r.URL] = *r
+	}
+
+	if len(configs) > 0 {
+		err := db.UpsertRecord(configs, "url", &[]string {
+			"url",                                                                                                                                                          
+            "enabled",                                                                                                                                                      
+            "response_time_threshold",                                                                                                                                      
+            "interval",                                                                                                                                                     
+            "certificate_monitoring",                                                                                                                                       
+            "certificate_expired_before",                                                                                                                                   
+            "follow_redirects",                                                                                                                                             
+            "ip_type",                                                                                                                                                      
+            "max_retries",                                                                                                                                                  
+            "retry_interval",                                                                                                                                               
+            "dns_timeout",                                                                                                                                                  
+            "dial_timeout",                                                                                                                                                 
+            "tls_handshake_timeout",                                                                                                                                        
+            "response_header_timeout",     
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		var synced []*models.Monitor
+		if err := db.DB.Where("url IN ?", urls).Find(&synced).Error; err != nil {
+			return nil, err
+		}
+
+		for _, cfg := range synced {
+			src, ok := configByUrl[cfg.URL] 
+
+            if !ok {                                                                                                                                                        
+                continue                                                                                                                                                        
+            }               
+
+            cfg.Enabled = src.Enabled                                                                                                                                       
+            cfg.Interval = src.Interval                                                                                                                                     
+            cfg.ResponseTimeThreshold = src.ResponseTimeThreshold                                                                                                           
+            cfg.CertificateMonitoring = src.CertificateMonitoring                                                                                                           
+            cfg.CertificateExpiredBefore = src.CertificateExpiredBefore                                                                                                     
+            cfg.FollowRedirects = src.FollowRedirects                                                                                                                       
+            cfg.IPType = src.IPType                                                                                                                                         
+            cfg.MaxRetries = src.MaxRetries                                                                                                                                 
+            cfg.RetryInterval = src.RetryInterval                                                                                                                           
+            cfg.DNSTimeout = src.DNSTimeout                                                                                                                                 
+            cfg.DialTimeout = src.DialTimeout                                                                                                                               
+            cfg.TLSHandshakeTimeout = src.TLSHandshakeTimeout                                                                                                               
+            cfg.ResponseHeaderTimeout = src.ResponseHeaderTimeout
+		}
+
+		return synced, nil
+	}
+
+	return configs, nil
 }
