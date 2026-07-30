@@ -4,7 +4,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"os"
 	"time"
 	"uptime-go/internal/configuration"
 	"uptime-go/internal/models"
@@ -75,12 +74,33 @@ func (s *Server) UpdateConfigHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Configuration updated. Systemd will restart the service to apply changes."})
+}
 
-	go func() {                                                             
-        time.Sleep(1 * time.Second)                                             
-        log.Info().Msg("Exiting to trigger systemd auto-restart...")            
-        os.Exit(1)                                                              
-    }() 
+func (s *Server) ReloadConfigHanlder(c *gin.Context){
+	if err := configuration.Load(s.configPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to load configuration",
+		})
+		log.Err(err).Msg("Error loading configuration during reload")
+		return
+	}
+
+	syncedConfigs, err := configuration.SyncMonitorsWithDB(s.db, configuration.Config.Monitor)
+	if err != nil{
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to sync configuration with database",
+		})
+		log.Err(err).Msg("Error syncing configuration with database during reload")
+		return
+	}
+
+	if s.monitor != nil {
+		s.monitor.Reload(syncedConfigs)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Configuration reloaded successfully",
+	})
 }
 
 func (s *Server) GetMonitoringReport(c *gin.Context) {
