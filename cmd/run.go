@@ -134,7 +134,7 @@ Example:
 				Bind:       apiBind,
 				Port:       apiPort,
 				ConfigPath: configPath,
-			}, db)
+			}, db, uptimeMonitor)
 
 			go func() {
 				if err := apiServer.Start(); err != nil {
