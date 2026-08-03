@@ -104,49 +104,6 @@ func (s *Server) ReloadConfigHanlder(c *gin.Context){
 }
 
 func (s *Server) GetMonitoringReport(c *gin.Context) {
-	url := c.Query("url")
-	if url != ""{
-		monitor, err := s.db.GetMonitorHistories(url, 100, time.Time{}, time.Time{})
-		if err != nil{
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"message": "Failed to retrieve monitor history",
-				"error": err.Error(),
-			})
-			return
-		}
-
-		if monitor == nil {
-			c.JSON(http.StatusNotFound, gin.H{
-				"message" : "Record not found for the given url",
-			})
-			return
-		}
-
-		var params ReportQueryParams
-
-		_ = c.ShouldBindQuery(&params)
-
-		var dailyStats []MonitorDailyUptimeStats
-
-		if params.WithStat {
-			now := time.Now().UTC()
-			today := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, now.Location())
-			ninetyDaysAgo := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location()).AddDate(0, 0, -89)
-			
-			stats, err := s.db.GetDailyStats([]string{monitor.URL}, ninetyDaysAgo, today)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"message": "Failed to retrieve monitor histories for stats calculation",
-					"error": err.Error(),
-				})
-				return
-			}
-			dailyStats = calculateUptimeStats(stats[monitor.URL], ninetyDaysAgo, today)
-		}
-		c.JSON(http.StatusOK, buildMonitorResponse(*monitor, dailyStats))
-		return
-	}
-
 	var params ReportQueryParams
 
 	if err := c.ShouldBindQuery(&params); err != nil {
