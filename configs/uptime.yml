@@ -3,6 +3,7 @@
 # max_retries: number of retry attempts before marking as DOWN (default: 3)
 # Granular timeouts: dns_timeout, dial_timeout, tls_handshake_timeout, response_header_timeout
 # ip_type: ipv4, ipv6, or both (default: ipv4)
+# follow_redirects: follow HTTP redirects (default: true)
 
 monitor:
   - url: "http://example.com"
@@ -11,6 +12,7 @@ monitor:
     response_time_threshold: 30s
     certificate_monitoring: true
     certificate_expired_before: 31d
+    follow_redirects: true
     ip_type: ipv4
     
     # Retry configuration (optional - defaults shown)

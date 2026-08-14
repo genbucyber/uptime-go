@@ -24,6 +24,7 @@ type UptimeMonitor struct {
 	db       *database.Database
 	stopChan chan struct{}
 	wg       sync.WaitGroup
+	mu		 sync.Mutex
 }
 
 func NewUptimeMonitor(db *database.Database, configs []*models.Monitor) (*UptimeMonitor, error) {
@@ -55,6 +56,26 @@ func (m *UptimeMonitor) Shutdown() {
 	close(m.stopChan)
 	m.wg.Wait()
 	log.Info().Msg("Uptime monitoring stopped")
+}
+
+func (m *UptimeMonitor) Reload(newConfig []*models.Monitor){
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	log.Info().Msg("Reloading uptime monitor configuration...")
+	close(m.stopChan)
+	m.wg.Wait()
+	m.stopChan = make(chan struct{})
+	m.configs = newConfig
+	log.Info().Msgf("Starting uptime monitor for %d websites after reload", len(m.configs))
+	for _, cfg := range m.configs{
+		if !cfg.Enabled {
+			log.Info().Msgf("%s - skipped because disable", cfg.URL)
+			continue
+		}
+		m.wg.Add(1)
+		go m.monitorWebsite(cfg)
+	}
+
 }
 
 func (m *UptimeMonitor) monitorWebsite(cfg *models.Monitor) {
