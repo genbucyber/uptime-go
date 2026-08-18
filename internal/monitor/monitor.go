@@ -6,6 +6,7 @@ import (
 	"fmt"
 	stdnet "net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -170,6 +171,13 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 		log.Error().Err(err).Msgf("Error checking %s: %v", monitor.URL, result.ErrorMessage)
 	}
 
+	if result.IsUp {
+		if ok, anomalyMsg := m.validateContentSize(monitor, result.ContentSize); !ok {
+			result.IsUp = false
+			result.ErrorMessage = anomalyMsg
+		}
+	}
+
 	// Log phase timings for debugging
 	if result.DNSTime > 0 || result.ConnectTime > 0 {
 		log.Debug().Msgf("%s - Timings: DNS=%v, Connect=%v, FirstByte=%v, Total=%v",
@@ -201,6 +209,7 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 
 		m.resolveIncidents(monitor, incident.UnexpectedStatusCode)
 		m.resolveIncidents(monitor, incident.Timeout)
+		m.resolveIncidents(monitor, incident.ContentSize)
 		if monitor.CertificateMonitoring {
 			m.handleSSL(monitor, result)
 		}
@@ -233,6 +242,7 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 			IsUp:         result.IsUp,
 			StatusCode:   result.StatusCode,
 			ResponseTime: responseTime,
+			ContentSize: result.ContentSize,
 		},
 	}
 
@@ -253,7 +263,10 @@ func (m *UptimeMonitor) handleWebsiteDown(monitor *models.Monitor, result *net.C
 		"error_message": result.ErrorMessage,
 	}
 
-	if err != nil {
+	if strings.Contains(result.ErrorMessage, "Content size anomaly"){
+		incidentType = incident.ContentSize
+		description = result.ErrorMessage
+	}else if err != nil {
 		isTimeout := false
 		var netErr stdnet.Error
 
@@ -420,4 +433,35 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 	}
 
 	return false
+}
+
+func (m *UptimeMonitor) validateContentSize(monitor *models.Monitor, currentSize int64) (bool, string) {
+	recentSizes, err := m.db.GetRecentSuccessfulyContentSize(monitor.ID, incident.RollingSampeLimit)
+	if err != nil {
+		log.Warn().Err(err).Msgf("%s - Failed to fetch recent content sizes", monitor.URL)
+		return true, ""
+	}
+
+	if len(recentSizes) < incident.MinSampleSizeForAnomal {
+		return true, ""
+	}
+
+	medianSize := helper.CalculateMedian(recentSizes)
+	if medianSize == 0 {
+		return true, ""
+	}
+
+	absDiff := currentSize - medianSize
+	if absDiff < 0 {
+		absDiff = -absDiff
+	}
+
+	pctDiff := float64(absDiff) / float64(medianSize)
+	if absDiff >= incident.MinAbsoluteChangeBytes && pctDiff >= incident.MinPercentageChange{
+		errMsg := fmt.Sprintf("Content size anomaly: received %d bytes, rolling median is %d bytes (diff: %d bytes, %.1f%%)", currentSize, medianSize, absDiff, pctDiff*100)
+
+		return false, errMsg
+	}
+
+	return true, ""
 }

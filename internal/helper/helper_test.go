@@ -30,3 +30,10 @@ func TestParseDurationDefault(t *testing.T) {
 
 	assert.Equal(t, result, time.Duration(19)*time.Second)
 }
+
+func TestCalculateMedian(t *testing.T) {
+	resSize := []int64{120, 109, 106, 90, 102, 104, 124, 119, 108}
+	result := CalculateMedian(resSize)
+
+	assert.Equal(t, result, int64(108))
+}
