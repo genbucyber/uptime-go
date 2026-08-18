@@ -3,6 +3,7 @@ package monitor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -264,6 +265,19 @@ func TestHandleSSL(t *testing.T) {
 			},
 			expectedResult: true,
 			expectedDesc:   "Certificate almost expired",
+		},
+		{
+			name: "create almost expired with bash hook",
+			monitor: models.Monitor{
+				CertificateExpiredBefore: &expiredDuration,
+				BashHook: `echo 'hello world'`,
+			},
+			checkResult: net.CheckResults{SSLExpiredDate: &expiringSoonDate},
+			setup: func(db *database.Database, monitor *models.Monitor) {
+				db.DB.Create(monitor)
+			},
+			expectedResult: true,
+			expectedDesc: "Certificate almost expired",
 		},
 		{
 			name: "solve incident",

@@ -1,9 +1,22 @@
 # interval, response_time_threshold, certificate_expired_before: can be s(second)/m(minutes)/h(hour)/d(day)
 
 monitor:
-  - url: "http://google.com"
+  - url: "http://example.com"
     enabled: true
     interval: 5m
-    response_time_threshold: 5s
+    response_time_threshold: 30s
     certificate_monitoring: true
     certificate_expired_before: 31d
+    ip_type: ipv4
+    
+    # Retry configuration (optional - defaults shown)
+    max_retries: 3           # Retry 3 times before marking DOWN
+    retry_interval: 30s      # Check every 30s when in PENDING state
+    
+    # Granular timeout configuration (optional - defaults shown)
+    dns_timeout: 5s          # DNS resolution timeout
+    dial_timeout: 10s        # TCP connection timeout
+    tls_handshake_timeout: 10s   # TLS handshake timeout
+    response_header_timeout: 20s # Response header timeout
+
+    bash_hook: 'echo "hello"'

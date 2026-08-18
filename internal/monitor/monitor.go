@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"uptime-go/internal/helper"
+	"uptime-go/internal/hooks"
 	"uptime-go/internal/incident"
 	"uptime-go/internal/models"
 	"uptime-go/internal/net"
@@ -377,6 +378,21 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 		// If there is no incident, create a new "expired" incident.
 		if lastIncident.IsNotExists() {
 			log.Warn().Msgf("%s - Certificate expired - [%s]", monitor.URL, result.SSLExpiredDate)
+			
+			shouldNotify := true
+			if monitor.BashHook != "" {
+				log.Info().Msgf("%s - Running a Bash SSL hook: %s", monitor.URL, monitor.BashHook)  
+				hookOutput, err := hooks.Execute(monitor.BashHook)
+				if err == nil {
+					log.Info().Msgf("%s - SSL hook successful", monitor.URL) 
+					shouldNotify = false
+				}else{
+					log.Error().Err(err).Msgf("%s - SSL hook failed", monitor.URL)
+					attr["hook_error"] = err.Error()
+					attr["hook_output"] = hookOutput
+				}
+			}
+
 			inc := &models.Incident{
 				ID:          helper.GenerateRandomID(),
 				MonitorID:   monitor.ID,
@@ -384,9 +400,13 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 				Description: "Certificate expired",
 				Monitor:     *monitor,
 			}
-			if id, err := net.NotifyIncident(inc, incident.HIGH, incident.EventWebsiteCertificateExpired, attr); err == nil {
-				inc.IncidentID = id
+
+			if shouldNotify {
+				if id, err := net.NotifyIncident(inc, incident.HIGH, incident.EventWebsiteCertificateExpired, attr); err == nil {
+					inc.IncidentID = id
+				}
 			}
+
 			m.db.DB.Create(inc)
 			return true
 		}
@@ -403,6 +423,21 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 		// If no incident exists, create a new "almost expired" incident.
 		if lastIncident.IsNotExists() {
 			log.Warn().Msgf("%s - Please update SSL Certificate - [%s]", monitor.URL, result.SSLExpiredDate)
+
+			shouldNotify := true
+			if monitor.BashHook != "" {
+				log.Info().Msgf("%s - Running a Bash SSL hook: %s", monitor.URL, monitor.BashHook)  
+				hookOutput, err := hooks.Execute(monitor.BashHook)
+				if err == nil {
+					log.Info().Msgf("%s - SSL hook successful", monitor.URL) 
+					shouldNotify = false
+				}else{
+					log.Error().Err(err).Msgf("%s - SSL hook failed", monitor.URL)
+					attr["hook_error"] = err.Error()
+					attr["hook_output"] = hookOutput
+				}
+			}
+
 			inc := &models.Incident{
 				ID:          helper.GenerateRandomID(),
 				MonitorID:   monitor.ID,
@@ -410,8 +445,10 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 				Description: "Certificate almost expired",
 				Monitor:     *monitor,
 			}
-			if id, err := net.NotifyIncident(inc, incident.INFO, incident.EventWebsiteCertificateExpired, attr); err == nil {
-				inc.IncidentID = id
+			if shouldNotify {
+				if id, err := net.NotifyIncident(inc, incident.INFO, incident.EventWebsiteCertificateExpired, attr); err == nil {
+					inc.IncidentID = id
+				}
 			}
 			m.db.DB.Create(inc)
 			return true
