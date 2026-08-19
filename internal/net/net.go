@@ -210,8 +210,6 @@ func (nc *NetworkConfig) CheckWebsite() (*CheckResults, error) {
 	defer resp.Body.Close()
 
 	// Read at least some of the body to ensure the server is responsive
-	// bodyBuf := make([]byte, 1024)
-	// _, _ = io.ReadFull(resp.Body, bodyBuf)
 	body, _ := io.ReadAll(resp.Body)
 	result.ContentSize = int64(len(body))
 

@@ -367,11 +367,38 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 		// If the existing incident is for "almost expired", update it to "expired".
 		if lastIncident.IsExists() && lastIncident.Description == "Certificate almost expired" {
 			log.Warn().Msgf("%s - Certificate expired - [%s]", monitor.URL, result.SSLExpiredDate)
-			lastIncident.Description = "Certificate expired"
-			if id, err := net.NotifyIncident(lastIncident, incident.HIGH, incident.EventWebsiteCertificateExpired, attr); err == nil {
-				lastIncident.IncidentID = id
+
+			shouldNotify := true
+			if monitor.BashHook != "" {
+				log.Info().Msgf("%s - Running a Bash SSL hook: %s", monitor.URL, monitor.BashHook)
+				hookOutput, err := hooks.Execute(monitor.BashHook)
+				if err == nil {
+					log.Info().Msgf("%s - SSL hook successful, Verifying the certificate...", monitor.URL)
+					if newDate, err := m.recheckSSL(monitor); err == nil && newDate != nil && time.Until(*newDate) > 0 {
+						result.SSLExpiredDate = newDate
+						shouldNotify = false
+						lastIncident.SolvedAt = &now
+						m.db.Upsert(lastIncident)
+						log.Info().Msgf("%s - The certificate has been successfully updated", monitor.URL)
+					}else{
+						log.Warn().Msgf("%s - Hook exit 0, but the certificate is still expired", monitor.URL)
+						attr["hook_output"] = hookOutput
+						attr["hook_error"] = "Hook exit 0, but the certificate has still expired"
+					}
+				}else{
+					log.Error().Err(err).Msgf("%s - SSL hook failed", monitor.URL)
+					attr["hook_error"] = err.Error()
+					attr["hook_output"] = hookOutput
+				}
 			}
-			m.db.Upsert(lastIncident)
+
+			if shouldNotify {
+				lastIncident.Description = "Certificate expired"
+				if id, err := net.NotifyIncident(lastIncident, incident.HIGH, incident.EventWebsiteCertificateExpired, attr); err == nil {
+					lastIncident.IncidentID = id
+				}
+				m.db.Upsert(lastIncident)
+			}
 			return true
 		}
 
@@ -384,8 +411,16 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 				log.Info().Msgf("%s - Running a Bash SSL hook: %s", monitor.URL, monitor.BashHook)  
 				hookOutput, err := hooks.Execute(monitor.BashHook)
 				if err == nil {
-					log.Info().Msgf("%s - SSL hook successful", monitor.URL) 
-					shouldNotify = false
+					log.Info().Msgf("%s - SSL hook successful, Verifying the certificate...", monitor.URL) 
+					if newDate, err := m.recheckSSL(monitor); err == nil && newDate != nil && time.Until(*newDate) > 0 {
+						result.SSLExpiredDate = newDate
+						shouldNotify = false
+						log.Info().Msgf("%s - The certificate has been successfully updated", monitor.URL)
+					}else{
+						log.Warn().Msgf("%s - Hook exit 0, but the certificate is still expired", monitor.URL)
+						attr["hook_output"] = hookOutput
+						attr["hook_error"] = "Hook exit 0, but the certificate has still expired"
+					}
 				}else{
 					log.Error().Err(err).Msgf("%s - SSL hook failed", monitor.URL)
 					attr["hook_error"] = err.Error()
@@ -405,9 +440,9 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 				if id, err := net.NotifyIncident(inc, incident.HIGH, incident.EventWebsiteCertificateExpired, attr); err == nil {
 					inc.IncidentID = id
 				}
+				m.db.DB.Create(inc)
 			}
 
-			m.db.DB.Create(inc)
 			return true
 		}
 
@@ -429,8 +464,16 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 				log.Info().Msgf("%s - Running a Bash SSL hook: %s", monitor.URL, monitor.BashHook)  
 				hookOutput, err := hooks.Execute(monitor.BashHook)
 				if err == nil {
-					log.Info().Msgf("%s - SSL hook successful", monitor.URL) 
-					shouldNotify = false
+					log.Info().Msgf("%s - SSL hook successful, Verifying the certificate..", monitor.URL) 
+					if newDate, err := m.recheckSSL(monitor); err == nil && newDate != nil && (monitor.CertificateExpiredBefore == nil || time.Until(*newDate) > *monitor.CertificateExpiredBefore) {
+						result.SSLExpiredDate = newDate
+						shouldNotify = false
+						log.Info().Msgf("%s - The certificate has been successfully updated", monitor.URL)
+					}else{
+						log.Warn().Msgf("%s - Hook exit 0, but the certificate is still expired", monitor.URL)
+						attr["hook_output"] = hookOutput
+						attr["hook_error"] = "Hook exit 0, but the certificate has still expired"
+					}
 				}else{
 					log.Error().Err(err).Msgf("%s - SSL hook failed", monitor.URL)
 					attr["hook_error"] = err.Error()
@@ -449,8 +492,9 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 				if id, err := net.NotifyIncident(inc, incident.INFO, incident.EventWebsiteCertificateExpired, attr); err == nil {
 					inc.IncidentID = id
 				}
+				m.db.DB.Create(inc)
 			}
-			m.db.DB.Create(inc)
+			
 			return true
 		}
 
@@ -470,6 +514,32 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 	}
 
 	return false
+}
+
+func (m *UptimeMonitor) recheckSSL(monitor *models.Monitor) (*time.Time, error) {
+	nc := &net.NetworkConfig{
+		URL: monitor.URL,
+		RefreshInterval: monitor.Interval,
+		Timeout: monitor.ResponseTimeThreshold,
+		FollowRedirects: monitor.FollowRedirects,
+		SkipSSL: !monitor.CertificateMonitoring,
+		IPType: monitor.IPType,
+		DNSTimeout: monitor.DNSTimeout,
+		DialTimeout: monitor.DialTimeout,
+		TLSHandshakeTimeout: monitor.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: monitor.ResponseHeaderTimeout,
+	}
+
+	res, err := nc.CheckWebsite()
+	if err != nil {
+		return nil, err
+	}
+
+	if res.SSLExpiredDate == nil {
+		return nil, errors.New("SSL certificate not found")
+	}
+
+	return res.SSLExpiredDate, nil
 }
 
 func (m *UptimeMonitor) validateContentSize(monitor *models.Monitor, currentSize int64) (bool, string) {

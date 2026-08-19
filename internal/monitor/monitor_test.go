@@ -266,19 +266,6 @@ func TestHandleSSL(t *testing.T) {
 			expectedDesc:   "Certificate almost expired",
 		},
 		{
-			name: "create almost expired with bash hook",
-			monitor: models.Monitor{
-				CertificateExpiredBefore: &expiredDuration,
-				BashHook: `echo 'hello world'`,
-			},
-			checkResult: net.CheckResults{SSLExpiredDate: &expiringSoonDate},
-			setup: func(db *database.Database, monitor *models.Monitor) {
-				db.DB.Create(monitor)
-			},
-			expectedResult: true,
-			expectedDesc: "Certificate almost expired",
-		},
-		{
 			name: "solve incident",
 			monitor: models.Monitor{
 				CertificateExpiredBefore: &expiredDuration,
@@ -446,6 +433,144 @@ func TestCheckWebsite(t *testing.T) {
 
 		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.UnexpectedStatusCode)
 		assert.True(t, lastIncident.IsNotExists())
+	})
+}
+
+func TestHandleSSLWithHook(t *testing.T) {
+	expiredDuration := time.Hour * 24 * 30
+	now := time.Now()
+	expiredDate := now.Add(-time.Hour)
+	expiringSoonDate := now.Add(time.Hour * 24 * 15)
+
+	t.Run("hook exit 0 and certificate successfully renewed", func(t *testing.T) {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+
+		monitor := &models.Monitor{
+			ID: helper.GenerateRandomID(),
+			URL: ts.URL,
+			CertificateMonitoring: true,
+			CertificateExpiredBefore: &expiredDuration,
+			BashHook: `echo 'hello'`,
+		}
+
+		db.DB.Create(monitor)
+		checkResult := net.CheckResults{
+			SSLExpiredDate: &expiringSoonDate,
+		}
+
+		result := uptimeMonitor.handleSSL(monitor, &checkResult)
+		assert.True(t, result)
+
+		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+		assert.True(t, lastIncident.IsNotExists())
+
+		assert.NotNil(t, checkResult.SSLExpiredDate)
+		assert.True(t, time.Until(*checkResult.SSLExpiredDate) > expiredDuration)
+	})
+
+	t.Run("hook exit 0 but certificate is still expired", func(t *testing.T) {
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+
+		monitor := &models.Monitor{
+			ID: helper.GenerateRandomID(),
+			URL: "https://invalid-unreachable-host.local",
+			CertificateMonitoring: true,
+			CertificateExpiredBefore: &expiredDuration,
+			BashHook: `echo 'testing'`,
+		}
+
+		db.DB.Create(monitor)
+		checkResult := net.CheckResults{
+			SSLExpiredDate: &expiringSoonDate,
+		}
+
+		result := uptimeMonitor.handleSSL(monitor, &checkResult)
+		assert.True(t, result)
+
+		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+		assert.True(t, lastIncident.IsExists())
+
+		assert.Equal(t, "Certificate almost expired", lastIncident.Description)
+	})
+
+	t.Run("hook execution failed", func(t *testing.T) {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+
+		monitor := &models.Monitor{
+			ID: helper.GenerateRandomID(),
+			URL: "https://example.com",
+			CertificateMonitoring: true,
+			CertificateExpiredBefore: &expiredDuration,
+			BashHook: `exit 1`,
+		}
+
+		db.DB.Create(monitor)
+		checkResult := net.CheckResults{
+			SSLExpiredDate: &expiringSoonDate,
+		}
+
+		result := uptimeMonitor.handleSSL(monitor, &checkResult)
+		assert.True(t, result)
+
+		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+		assert.True(t, lastIncident.IsExists())
+
+		assert.Equal(t, "Certificate almost expired", lastIncident.Description)
+	})
+
+	t.Run("hook exit 0 and resolves existing almost expired incident", func(t *testing.T) {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+
+		incidentID := helper.GenerateRandomID()
+
+		monitor := &models.Monitor{
+			ID: helper.GenerateRandomID(),
+			URL: ts.URL,
+			CertificateMonitoring: true,
+			BashHook: `echo 'renewed'`,
+			Incidents: []models.Incident{
+				{
+					ID: incidentID,
+					Type: incident.SSLExpired,
+					Description: "Certificate almost expired",
+				},
+			},
+		}
+
+		db.DB.Create(monitor)
+		checkResult := net.CheckResults{
+			SSLExpiredDate: &expiredDate,
+		}
+
+		result := uptimeMonitor.handleSSL(monitor, &checkResult)
+		assert.True(t, result)
+
+		lastActiveIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+		assert.True(t, lastActiveIncident.IsNotExists())
+
+		var savedIncident models.Incident
+		err := db.DB.Where("id = ?", incidentID).First(&savedIncident).Error
+		assert.NoError(t, err)
+		assert.NotNil(t, savedIncident.SolvedAt)
 	})
 }
 
