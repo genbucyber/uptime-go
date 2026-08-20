@@ -20,3 +20,13 @@ monitor:
     response_header_timeout: 20s # Response header timeout
 
     bash_hook: 'echo "hello"'
+    content_validation:
+      enabled: true
+
+      required_words:
+        - "OJT Guardian"
+        - "Login"
+
+      forbidden_words:
+        - "400 Bad Request"
+        - "500 Internal Server Error"

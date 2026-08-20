@@ -9,11 +9,3 @@ func TestExecuteCommand(t *testing.T){
 	}
 	t.Logf("Output Succes: \n%s", output)
 }
-
-// func TestExecuteBash(t *testing.T){
-// 	output, err := ExecuteBash("/tmp/bash-test.sh")
-// 	if err != nil {
-// 		t.Fatalf("Output Error: %v", err)
-// 	}
-// 	t.Logf("Output Succes: \n%s", output)
-// }

@@ -1,6 +1,7 @@
 package net
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"uptime-go/internal/incident"
 	"uptime-go/internal/version"
 )
 
@@ -44,6 +46,8 @@ type CheckResults struct {
 	IsUp           bool
 	StatusCode     int
 	ContentSize	   int64
+	Body		   string
+	IncidentType   incident.Type
 	ErrorMessage   string
 	SSLExpiredDate *time.Time
 
@@ -205,20 +209,41 @@ func (nc *NetworkConfig) CheckWebsite() (*CheckResults, error) {
 
 	if err != nil {
 		result.ErrorMessage = nc.categorizeError(err, totalTimeout, dnsTimeout, dialTimeout, tlsTimeout, headerTimeout)
+		if errors.Is(err, context.DeadlineExceeded) {
+			result.IncidentType = incident.Timeout
+		}else{
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				result.IncidentType = incident.Timeout
+			}else{
+				result.IncidentType = incident.UnexpectedStatusCode
+			}
+		}
 		return result, err
 	}
 	defer resp.Body.Close()
 
 	// Read at least some of the body to ensure the server is responsive
-	// bodyBuf := make([]byte, 1024)
-	// _, _ = io.ReadFull(resp.Body, bodyBuf)
-	body, _ := io.ReadAll(resp.Body)
-	result.ContentSize = int64(len(body))
+	const maxBodySampleSize = 1 * 1024 * 1024
+	
+	var bodyBuf bytes.Buffer
+	limitReader := io.LimitReader(resp.Body, maxBodySampleSize)
+	sampleBytes, _ := io.Copy(&bodyBuf, limitReader)
+
+	remainingBytes, _ := io.Copy(io.Discard, resp.Body)
+
+	result.ContentSize = sampleBytes + remainingBytes
+	result.Body = bodyBuf.String()
 
 	// Treat redirects (3xx) as UP so 302 doesn't mark the monitor down.
 	success := resp.StatusCode >= 200 && resp.StatusCode < 400
 	result.IsUp = success
 	result.StatusCode = resp.StatusCode
+
+	if !success {
+		result.IncidentType = incident.UnexpectedStatusCode
+		result.ErrorMessage = fmt.Sprintf("Received non-successful status code: %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+	}
 
 	// Extract TLS information
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {

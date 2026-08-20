@@ -45,6 +45,22 @@ func TestMonitorHandleWebsiteDown(t *testing.T) {
 			expectedIncidentType: incident.UnexpectedStatusCode,
 		},
 		{
+			name:                 "new content size anomaly incident",
+			monitor:              models.Monitor{URL: "https://example.com"},
+			checkResult:          net.CheckResults{StatusCode: http.StatusOK, IncidentType: incident.ContentSize, ErrorMessage: "Content size anomaly: received 10 bytes"},
+			err:                  nil,
+			expectedResult:       true,
+			expectedIncidentType: incident.ContentSize,
+		},
+		{
+			name:                 "new word detector anomaly incident",
+			monitor:              models.Monitor{URL: "https://example.com"},
+			checkResult:          net.CheckResults{StatusCode: http.StatusOK, IncidentType: incident.WordDetector, ErrorMessage: "Forbidden word detected: 500 Server Error in response body"},
+			err:                  nil,
+			expectedResult:       true,
+			expectedIncidentType: incident.WordDetector,
+		},
+		{
 			name:                 "new unexpected error incident",
 			monitor:              models.Monitor{URL: "https://example.com"},
 			checkResult:          net.CheckResults{StatusCode: http.StatusInternalServerError},
@@ -564,6 +580,99 @@ func TestValidateContentSize(t *testing.T){
 				assert.Contains(t, errMsg, "Content size anomaly")
 			}else{
 				assert.Empty(t, errMsg)
+			}
+		})
+	}
+}
+
+func TestWordDetector(t *testing.T){
+	testCases := []struct{
+		name			string
+		body			string
+		requiredWords	[]string
+		forbiddenWords	[]string
+		expectedOk 		bool
+		expectedErrMsg	string
+	}{
+		{
+			name: "Normal website",
+			body: `
+				<html>
+					<body>
+						<h1>OJT Guardian</h1>
+						<a href="#">Login</a>
+					</body
+				</html>
+			`,
+			requiredWords: []string{"OJT Guardian", "Login"},
+			forbiddenWords: []string{"400 Bad Request", "500 Internal Server Error"},
+			expectedOk: true,
+			expectedErrMsg: "",
+		},
+		{
+			name: "Forbidden word: 500 Internal Server",
+			body: `
+				<html>
+					<body>
+						<h1>OJT Guardian</h1>
+						<a href="#">Login</a>
+
+						<h1>500 Internal Server Error</h1>
+					</body
+				</html>
+			`,
+			requiredWords: []string{"OJT Guardian", "Login"},
+			forbiddenWords: []string{"400 Bad Request", "500 Internal Server Error"},
+			expectedOk: false,
+			expectedErrMsg: "Found forbidden word: 500 Internal Server Error",
+		},
+		{
+			name: "Forbidden word: 400 Bad Request",
+			body: `
+				<html>
+					<body>
+						<h1>OJT Guardian</h1>
+						<a href="#">Login</a>
+
+						<h1>400 Bad Request</h1>
+					</body
+				</html>
+			`,
+			requiredWords: []string{"OJT Guardian", "Login"},
+			forbiddenWords: []string{"400 Bad Request", "500 Internal Server Error"},			
+			expectedOk: false,
+			expectedErrMsg: "Found forbidden word: 400 Bad Request",
+		},
+		{
+			name: "Required word missing: OJT Guardian",
+			body: `
+				<html>
+					<body>
+						<a href="#">Login</a>
+					</body
+				</html>
+			`,
+			requiredWords: []string{"OJT Guardian", "Login"},
+			forbiddenWords: []string{"400 Bad Request", "500 Internal Server Error"},			
+			expectedOk: false,
+			expectedErrMsg: "Missing required word: OJT Guardian",
+		},
+	}
+
+	uptimeMonitor := &UptimeMonitor{}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			monitor := &models.Monitor{
+				ContentValidationEnabled: true,
+				RequiredWords: tc.requiredWords,
+				ForbiddenWords: tc.forbiddenWords,
+			}
+			ok, msg := uptimeMonitor.validateWords(monitor, tc.body)
+			assert.Equal(t, tc.expectedOk, ok)
+			if !tc.expectedOk {
+				assert.Contains(t, msg, tc.expectedErrMsg)
+			}else{
+				assert.Empty(t, msg)
 			}
 		})
 	}

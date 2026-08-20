@@ -172,10 +172,21 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 		log.Error().Err(err).Msgf("Error checking %s: %v", monitor.URL, result.ErrorMessage)
 	}
 
+	// Check using the content size detector 
 	if result.IsUp {
-		if ok, anomalyMsg := m.validateContentSize(monitor, result.ContentSize); !ok {
+		if ok, msg := m.validateContentSize(monitor, result.ContentSize); !ok {
 			result.IsUp = false
-			result.ErrorMessage = anomalyMsg
+			result.IncidentType = incident.ContentSize
+			result.ErrorMessage = msg
+		}
+	}
+
+	// Check using the Word Detector
+	if result.IsUp {
+		if ok, msg := m.validateWords(monitor, result.Body); !ok {
+			result.IsUp = false
+			result.IncidentType = incident.WordDetector
+			result.ErrorMessage = msg
 		}
 	}
 
@@ -211,6 +222,7 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 		m.resolveIncidents(monitor, incident.UnexpectedStatusCode)
 		m.resolveIncidents(monitor, incident.Timeout)
 		m.resolveIncidents(monitor, incident.ContentSize)
+		m.resolveIncidents(monitor, incident.WordDetector)
 		if monitor.CertificateMonitoring {
 			m.handleSSL(monitor, result)
 		}
@@ -243,7 +255,7 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 			IsUp:         result.IsUp,
 			StatusCode:   result.StatusCode,
 			ResponseTime: responseTime,
-			ContentSize: result.ContentSize,
+			ContentSize:  result.ContentSize,
 		},
 	}
 
@@ -264,8 +276,8 @@ func (m *UptimeMonitor) handleWebsiteDown(monitor *models.Monitor, result *net.C
 		"error_message": result.ErrorMessage,
 	}
 
-	if strings.Contains(result.ErrorMessage, "Content size anomaly"){
-		incidentType = incident.ContentSize
+	if result.IncidentType == incident.ContentSize || result.IncidentType == incident.WordDetector{
+		incidentType = result.IncidentType
 		description = result.ErrorMessage
 	}else if err != nil {
 		isTimeout := false
@@ -498,6 +510,40 @@ func (m *UptimeMonitor) validateContentSize(monitor *models.Monitor, currentSize
 		errMsg := fmt.Sprintf("Content size anomaly: received %d bytes, rolling median is %d bytes (diff: %d bytes, %.1f%%)", currentSize, medianSize, absDiff, pctDiff*100)
 
 		return false, errMsg
+	}
+
+	return true, ""
+}
+
+func (m *UptimeMonitor) validateWords(monitor *models.Monitor, body string) (bool, string) {
+	if monitor != nil && !monitor.ContentValidationEnabled {
+		return true, ""
+	}
+
+	var requiredWords, forbiddenWords []string
+	if monitor != nil {
+		requiredWords = monitor.RequiredWords
+		forbiddenWords = monitor.ForbiddenWords
+	}
+
+	if len(requiredWords) == 0 && len(forbiddenWords) == 0 {
+		return true, ""
+	}
+
+	body = helper.ExtractVisibleText(body)
+
+	for _, word := range forbiddenWords {
+		word = strings.TrimSpace(word)
+		if strings.Contains(body, strings.ToLower(word)){
+			return false, fmt.Sprintf("Found forbidden word: %s", word)
+		}
+	}
+
+	for _, word := range requiredWords {
+		word = strings.TrimSpace(word)
+		if !strings.Contains(body, strings.ToLower(word)){
+			return false, fmt.Sprintf("Missing required word: %s", word)
+		}
 	}
 
 	return true, ""

@@ -30,6 +30,7 @@ const (
 	SSLExpired           Type = "certificate_expired"
 	Timeout              Type = "timeout"
 	ContentSize			 Type = "content_size"
+	WordDetector		 Type = "word_detector"
 )
 
 const (
