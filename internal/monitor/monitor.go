@@ -341,7 +341,6 @@ func (m *UptimeMonitor) resolveIncidents(monitor *models.Monitor, incidentType i
 		m.db.Upsert(lastIncident)
 		log.Info().Msgf("%s - Incident Solved - Type: %s - Downtime: %s", monitor.URL, incidentType, time.Since(lastIncident.CreatedAt))
 		net.UpdateIncidentStatus(lastIncident, incident.Resolved)
-
 		return true
 	}
 
@@ -379,6 +378,7 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 						shouldNotify = false
 						lastIncident.SolvedAt = &now
 						m.db.Upsert(lastIncident)
+						net.UpdateIncidentStatus(lastIncident, incident.Resolved)
 						log.Info().Msgf("%s - The certificate has been successfully updated", monitor.URL)
 					}else{
 						log.Warn().Msgf("%s - Hook exit 0, but the certificate is still expired", monitor.URL)
@@ -506,7 +506,7 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 		// if lastIncident.IncidentID != 0 {
 		// 	net.UpdateIncidentStatus(lastIncident, incident.Resolved)
 		// }
-
+		net.UpdateIncidentStatus(lastIncident, incident.Resolved)
 		lastIncident.SolvedAt = &now
 		m.db.Upsert(lastIncident)
 		log.Info().Msgf("%s - SSL Updated", monitor.URL)
