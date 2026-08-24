@@ -20,6 +20,7 @@ monitor:
     response_header_timeout: 20s # Response header timeout
 
     bash_hook: 'echo "hello"'
+    
     content_validation:
       enabled: true
 

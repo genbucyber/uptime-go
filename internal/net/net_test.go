@@ -208,6 +208,31 @@ func TestCheckWebsiteSuccess(t *testing.T) {
 	}
 }
 
+func TestCheckWebsiteReadBody(t *testing.T) {
+	const forbiddenPhrase = "forbidden phrase after limit"
+	body := strings.Repeat("a", 1*1024*1024) + forbiddenPhrase
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	results, err := (&NetworkConfig{
+		URL:     server.URL,
+		Timeout: 10 * time.Second,
+	}).CheckWebsite()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if results.ContentSize != int64(len(body)) {
+		t.Fatalf("expected content size %d, got %d", len(body), results.ContentSize)
+	}
+	if !strings.Contains(results.Body, forbiddenPhrase) {
+		t.Fatal("expected response body past 1 MiB to be available for word validation")
+	}
+}
+
 func TestCheckWebsiteIPv4Only(t *testing.T) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -274,5 +299,35 @@ func TestCheckWebsiteIPv6Only(t *testing.T) {
 	}
 	if results == nil || !results.IsUp {
 		t.Fatalf("expected IPv6 check to be up, got %+v", results)
+	}
+}
+
+func TestCheckWebsiteTruncatedBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("partial body"))
+		if hj, ok := w.(http.Hijacker); ok {
+			if con, _, err := hj.Hijack(); err == nil {
+				_ = con.Close()
+			}
+		}
+	}))
+	defer server.Close()
+
+	nc := NetworkConfig{
+		URL: server.URL,
+		Timeout: 3 * time.Second,
+	}
+
+	results, err := nc.CheckWebsite()
+	if err == nil {
+		t.Fatal("expected error for truncated body transfer, but got nil")
+	}
+	if results == nil {
+		t.Fatal("expected results, but got nil")
+	}
+	if results.IsUp {
+		t.Errorf("expected IsUp to be false for truncated body, got true")
 	}
 }

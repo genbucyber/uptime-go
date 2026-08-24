@@ -457,7 +457,7 @@ func TestCheckWebsite(t *testing.T) {
 		uptimeMonitor.checkWebsite(monitor)
 
 		db.DB.First(monitor)
-		assert.False(t, *monitor.IsUp)
+		assert.True(t, *monitor.IsUp)
 		assert.Equal(t, 1, monitor.Retries)
 
 		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.UnexpectedStatusCode)
@@ -550,6 +550,7 @@ func TestValidateContentSize(t *testing.T){
 			monitor := &models.Monitor{
 				ID: "monitor-test",
 				URL: "https://example.com",
+				ContentValidationEnabled: true,
 			}
 			
 			err = db.DB.Create(monitor).Error

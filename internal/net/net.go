@@ -223,17 +223,28 @@ func (nc *NetworkConfig) CheckWebsite() (*CheckResults, error) {
 	}
 	defer resp.Body.Close()
 
-	// Read at least some of the body to ensure the server is responsive
-	const maxBodySampleSize = 1 * 1024 * 1024
-	
 	var bodyBuf bytes.Buffer
-	limitReader := io.LimitReader(resp.Body, maxBodySampleSize)
-	sampleBytes, _ := io.Copy(&bodyBuf, limitReader)
+	contentSize, err := io.Copy(&bodyBuf, resp.Body)
 
-	remainingBytes, _ := io.Copy(io.Discard, resp.Body)
-
-	result.ContentSize = sampleBytes + remainingBytes
+	if err != nil {
+		result.IsUp = false
+		result.ErrorMessage = nc.categorizeError(err, totalTimeout, dnsTimeout, dialTimeout, tlsTimeout, headerTimeout)
+		if errors.Is(err, context.DeadlineExceeded) {
+			result.IncidentType = incident.Timeout
+		}else{
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				result.IncidentType = incident.Timeout
+			}else{
+				result.IncidentType = incident.UnexpectedStatusCode
+			}
+		}
+		return result, err
+	}
+	
+	result.ContentSize = contentSize
 	result.Body = bodyBuf.String()
+
 
 	// Treat redirects (3xx) as UP so 302 doesn't mark the monitor down.
 	success := resp.StatusCode >= 200 && resp.StatusCode < 400
@@ -317,7 +328,7 @@ func (nc *NetworkConfig) categorizeError(err error, totalTimeout, dnsTimeout, di
 		return fmt.Sprintf("Network operation error for %s: %s - %v", nc.URL, opErr.Op, opErr.Err)
 	}
 
-	if errors.Is(err, io.EOF) {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return fmt.Sprintf("Connection closed prematurely (EOF) while fetching %s", nc.URL)
 	}
 

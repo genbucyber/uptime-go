@@ -214,6 +214,8 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 	switch newStatus {
 	case incident.StatusUP:
 		// Website is UP
+		isUp := true
+		monitor.IsUp = &isUp
 		monitor.Retries = 0 // Reset retries
 		if monitor.LastUp == nil {
 			monitor.LastUp = &now
@@ -237,6 +239,8 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 
 	default:
 		// Website is DOWN (after all retries exhausted)
+		isDown := false
+		monitor.IsUp = &isDown
 		monitor.Retries = 0 // Reset for next cycle
 		m.handleWebsiteDown(monitor, result, err)
 		log.Error().Msgf("%s - DOWN - All retries exhausted | Error: %s",
@@ -246,7 +250,6 @@ func (m *UptimeMonitor) checkWebsite(monitor *models.Monitor) {
 	// Update monitor state
 	responseTime := result.ResponseTime.Milliseconds()
 	monitor.UpdatedAt = result.LastCheck
-	monitor.IsUp = &result.IsUp
 	monitor.StatusCode = &result.StatusCode
 	monitor.ResponseTime = &responseTime
 	monitor.CertificateExpiredDate = result.SSLExpiredDate
@@ -485,6 +488,10 @@ func (m *UptimeMonitor) handleSSL(monitor *models.Monitor, result *net.CheckResu
 }
 
 func (m *UptimeMonitor) validateContentSize(monitor *models.Monitor, currentSize int64) (bool, string) {
+	if monitor != nil && !monitor.ContentValidationEnabled {
+		return true, ""
+	}
+	
 	recentSizes, err := m.db.GetRecentSuccessfulyContentSize(monitor.ID, incident.RollingSampeLimit)
 	if err != nil {
 		log.Warn().Err(err).Msgf("%s - Failed to fetch recent content sizes", monitor.URL)
