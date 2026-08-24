@@ -241,10 +241,9 @@ func (nc *NetworkConfig) CheckWebsite() (*CheckResults, error) {
 		}
 		return result, err
 	}
-	
+
 	result.ContentSize = contentSize
 	result.Body = bodyBuf.String()
-
 
 	// Treat redirects (3xx) as UP so 302 doesn't mark the monitor down.
 	success := resp.StatusCode >= 200 && resp.StatusCode < 400

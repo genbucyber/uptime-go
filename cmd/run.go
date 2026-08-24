@@ -75,6 +75,9 @@ Example:
 			"follow_redirects",
 			"ip_type",
 			"bash_hook",
+			"content_validation_enabled",
+			"required_words", 
+			"forbidden_words",
 			"max_retries",
 			"retry_interval",
 			"dns_timeout",
@@ -98,6 +101,9 @@ Example:
 			cfg.FollowRedirects = src.FollowRedirects
 			cfg.IPType = src.IPType
 			cfg.BashHook = src.BashHook
+			cfg.ContentValidationEnabled = src.ContentValidationEnabled
+			cfg.RequiredWords = src.RequiredWords
+			cfg.ForbiddenWords = src.ForbiddenWords
 			cfg.MaxRetries = src.MaxRetries
 			cfg.RetryInterval = src.RetryInterval
 			cfg.DNSTimeout = src.DNSTimeout
