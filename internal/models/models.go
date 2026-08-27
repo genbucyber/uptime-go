@@ -18,6 +18,7 @@ type Monitor struct {
 	CertificateExpiredBefore *time.Duration   `json:"-"`
 	FollowRedirects          bool             `json:"-"`
 	IPType                   string           `json:"-"`
+	BashHook				 string			  `json:"bash_hook,omitempty"`
 	IsUp                     *bool            `json:"is_up"`
 	StatusCode               *int             `json:"status_code"`
 	ResponseTime             *int64           `json:"response_time"` // in milliseconds
@@ -47,6 +48,7 @@ type MonitorHistory struct {
 	IsUp         bool      `json:"is_up" gorm:"index"`
 	StatusCode   int       `json:"status_code"`
 	ResponseTime int64     `json:"response_time"` // in milliseconds
+	ContentSize	 int64	   `json:"content_size"`
 	CreatedAt    time.Time `json:"created_at" gorm:"index"`
 	Monitor      Monitor   `json:"-" gorm:"foreignKey:MonitorID"`
 }

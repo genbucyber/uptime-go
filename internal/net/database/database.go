@@ -253,3 +253,21 @@ func (db *Database) GetLastIncident(url string, incidentType incident.Type) *mod
 
 	return &incident
 }
+
+func (db *Database) GetRecentSuccessfulyContentSize(monitorId string, limit int) ([]int64, error){
+	var sizes []int64
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
+	err := db.DB.Model(&models.MonitorHistory{}).
+		Where("monitor_id = ? AND is_up = ?", monitorId, true).
+		Order("created_at DESC").
+		Limit(limit).
+		Pluck("content_size", &sizes).Error
+	
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get recent content size: %w", err)
+	}
+
+	return sizes, nil
+}

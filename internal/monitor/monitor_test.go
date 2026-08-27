@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uptime-go/internal/helper"
 	"uptime-go/internal/incident"
 	"uptime-go/internal/models"
 	"uptime-go/internal/net"
@@ -433,4 +434,262 @@ func TestCheckWebsite(t *testing.T) {
 		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.UnexpectedStatusCode)
 		assert.True(t, lastIncident.IsNotExists())
 	})
+}
+
+func TestHandleSSLWithHook(t *testing.T) {
+	expiredDuration := time.Hour * 24 * 30
+	now := time.Now()
+	expiredDate := now.Add(-time.Hour)
+	expiringSoonDate := now.Add(time.Hour * 24 * 15)
+
+	t.Run("hook exit 0 and certificate successfully renewed", func(t *testing.T) {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+
+		monitor := &models.Monitor{
+			ID: helper.GenerateRandomID(),
+			URL: ts.URL,
+			CertificateMonitoring: true,
+			CertificateExpiredBefore: &expiredDuration,
+			BashHook: `echo 'hello'`,
+		}
+
+		db.DB.Create(monitor)
+		checkResult := net.CheckResults{
+			SSLExpiredDate: &expiringSoonDate,
+		}
+
+		result := uptimeMonitor.handleSSL(monitor, &checkResult)
+		assert.True(t, result)
+
+		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+		assert.True(t, lastIncident.IsNotExists())
+
+		assert.NotNil(t, checkResult.SSLExpiredDate)
+		assert.True(t, time.Until(*checkResult.SSLExpiredDate) > expiredDuration)
+	})
+
+	t.Run("hook exit 0 but certificate is still expired", func(t *testing.T) {
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+
+		monitor := &models.Monitor{
+			ID: helper.GenerateRandomID(),
+			URL: "https://invalid-unreachable-host.local",
+			CertificateMonitoring: true,
+			CertificateExpiredBefore: &expiredDuration,
+			BashHook: `echo 'testing'`,
+		}
+
+		db.DB.Create(monitor)
+		checkResult := net.CheckResults{
+			SSLExpiredDate: &expiringSoonDate,
+		}
+
+		result := uptimeMonitor.handleSSL(monitor, &checkResult)
+		assert.True(t, result)
+
+		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+		assert.True(t, lastIncident.IsExists())
+
+		assert.Equal(t, "Certificate almost expired", lastIncident.Description)
+	})
+
+	t.Run("hook execution failed", func(t *testing.T) {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+
+		monitor := &models.Monitor{
+			ID: helper.GenerateRandomID(),
+			URL: "https://example.com",
+			CertificateMonitoring: true,
+			CertificateExpiredBefore: &expiredDuration,
+			BashHook: `exit 1`,
+		}
+
+		db.DB.Create(monitor)
+		checkResult := net.CheckResults{
+			SSLExpiredDate: &expiringSoonDate,
+		}
+
+		result := uptimeMonitor.handleSSL(monitor, &checkResult)
+		assert.True(t, result)
+
+		lastIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+		assert.True(t, lastIncident.IsExists())
+
+		assert.Equal(t, "Certificate almost expired", lastIncident.Description)
+	})
+
+	t.Run("hook exit 0 and resolves existing almost expired incident", func(t *testing.T) {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		db, _ := database.InitializeTestDatabase()
+		uptimeMonitor, _ := NewUptimeMonitor(db, nil)
+
+		incidentID := helper.GenerateRandomID()
+
+		monitor := &models.Monitor{
+			ID: helper.GenerateRandomID(),
+			URL: ts.URL,
+			CertificateMonitoring: true,
+			BashHook: `echo 'renewed'`,
+			Incidents: []models.Incident{
+				{
+					ID: incidentID,
+					Type: incident.SSLExpired,
+					Description: "Certificate almost expired",
+				},
+			},
+		}
+
+		db.DB.Create(monitor)
+		checkResult := net.CheckResults{
+			SSLExpiredDate: &expiredDate,
+		}
+
+		result := uptimeMonitor.handleSSL(monitor, &checkResult)
+		assert.True(t, result)
+
+		lastActiveIncident := uptimeMonitor.db.GetLastIncident(monitor.URL, incident.SSLExpired)
+		assert.True(t, lastActiveIncident.IsNotExists())
+
+		var savedIncident models.Incident
+		err := db.DB.Where("id = ?", incidentID).First(&savedIncident).Error
+		assert.NoError(t, err)
+		assert.NotNil(t, savedIncident.SolvedAt)
+	})
+}
+
+func TestValidateContentSize(t *testing.T){
+	const kb = 1024
+	testCases := []struct {
+		name				string
+		historySizes		[]int64
+		currentSize			int64
+		exceptOk			bool
+		exceptMessage		bool
+	} {
+		{
+			name: "Insufficient sample data (< 5 samples)",
+			historySizes : []int64{
+				100 * kb, 100 * kb, 100 * kb,
+			},
+			currentSize: 1 * kb,
+			exceptOk: true,
+			exceptMessage: false,
+		},
+{
+			name: "Normal size",
+			historySizes : []int64{
+				100 * kb, 102 * kb, 98 * kb, 99 * kb, 109 * kb, 108 * kb,
+			},
+			currentSize: 101 * kb,
+			exceptOk: true,
+			exceptMessage: false,
+		},
+		{
+			name: "90% drop but difference < 50 KB",
+			historySizes : []int64{
+				505, 505, 505, 505, 505,
+			},
+			currentSize: 50,
+			exceptOk: true,
+			exceptMessage: false,
+		},
+		{
+			name: "100 KB difference but change < 70%",
+			historySizes : []int64{
+				5 * 1024 * kb, 5 * 1024 * kb, 5 * 1024 * kb, 5 * 1024 * kb, 5 * 1024 * kb, 5 * 1024 * kb,
+			},
+			currentSize: (5 * 1024 * kb) - (100 * kb),
+			exceptOk: true,
+			exceptMessage: false,
+		},		
+		{
+			name: "Drastic drop",
+			historySizes : []int64{
+				200 * kb, 205 * kb, 195 * kb, 200 * kb, 202 * kb, 198 * kb,
+			},
+			currentSize: 500,
+			exceptOk: false,
+			exceptMessage: true,
+		},
+		{
+			name: "Very large size spike",
+			historySizes : []int64{
+				50 * kb, 52 * kb, 48 * kb, 50 * kb, 51 * kb,
+			},
+			currentSize: 500 * kb,
+			exceptOk: false,
+			exceptMessage: true,
+		},
+		{
+			name: "Rolling median from 20 samples with an old outlier",
+			historySizes : []int64{
+				100 * kb, 100 * kb, 100 * kb, 100 * kb, 100 * kb,                       
+                100 * kb, 100 * kb, 100 * kb, 100 * kb, 100 * kb,                       
+                100 * kb, 100 * kb, 100 * kb, 100 * kb, 100 * kb,                       
+                100 * kb, 100 * kb, 100 * kb, 100 * kb, 10 * 1024 * kb, 
+			},
+			currentSize: 98 * kb,
+			exceptOk: true,
+			exceptMessage: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, err := database.InitializeTestDatabase()
+			assert.NoError(t, err)
+
+			monitor := &models.Monitor{
+				ID: "monitor-test",
+				URL: "https://example.com",
+			}
+			
+			err = db.DB.Create(monitor).Error
+			assert.NoError(t, err)
+
+			now := time.Now()
+			for i, size := range tc.historySizes{
+				history := models.MonitorHistory{
+					ID: helper.GenerateRandomID(),
+					MonitorID: monitor.ID,
+					IsUp: true,
+					StatusCode: 200,
+					ContentSize: size,
+					CreatedAt: now.Add(-time.Duration(len(tc.historySizes)-i) * time.Minute),
+				}
+				err := db.DB.Create(&history).Error
+				assert.NoError(t, err)
+			}
+
+			uptimeMonitor, err := NewUptimeMonitor(db, nil)
+			assert.NoError(t, err)
+
+			ok, errMsg := uptimeMonitor.validateContentSize(monitor, tc.currentSize)
+			assert.Equal(t, tc.exceptOk, ok)
+			
+			if tc.exceptMessage {
+				assert.NotEmpty(t, errMsg)
+				assert.Contains(t, errMsg, "Content size anomaly")
+			}else{
+				assert.Empty(t, errMsg)
+			}
+		})
+	}
 }

@@ -28,6 +28,7 @@ type MonitorConfig struct {
 	CertificateMonitoring    bool   `mapstructure:"certificate_monitoring" yaml:"certificate_monitoring" json:"certificate_monitoring"`
 	CertificateExpiredBefore string `mapstructure:"certificate_expired_before" yaml:"certificate_expired_before" json:"certificate_expired_before"`
 	IPType                   string `mapstructure:"ip_type" yaml:"ip_type,omitempty" json:"ip_type,omitempty"`
+	BashHook                 string `mapstructure:"bash_hook" yaml:"bash_hook,omitempty" json:"bash_hook,omitempty"`
 
 	// Retry configuration
 	MaxRetries    int    `mapstructure:"max_retries" yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
@@ -164,6 +165,7 @@ func Load(configPath string) error {
 			CertificateExpiredBefore: &certificateExpiredBefore,
 			FollowRedirects:          followRedirects,
 			IPType:                   ipType,
+			BashHook: 				  monitor.BashHook,
 			MaxRetries:               maxRetries,
 			RetryInterval:            retryInterval,
 			DNSTimeout:               dnsTimeout,
@@ -255,7 +257,8 @@ func SyncMonitorsWithDB(db *database.Database, configs []*models.Monitor) ([]*mo
             "certificate_monitoring",                                                                                                                                       
             "certificate_expired_before",                                                                                                                                   
             "follow_redirects",                                                                                                                                             
-            "ip_type",                                                                                                                                                      
+            "ip_type",           
+			"bash_hook",
             "max_retries",                                                                                                                                                  
             "retry_interval",                                                                                                                                               
             "dns_timeout",                                                                                                                                                  
@@ -286,7 +289,8 @@ func SyncMonitorsWithDB(db *database.Database, configs []*models.Monitor) ([]*mo
             cfg.CertificateMonitoring = src.CertificateMonitoring                                                                                                           
             cfg.CertificateExpiredBefore = src.CertificateExpiredBefore                                                                                                     
             cfg.FollowRedirects = src.FollowRedirects                                                                                                                       
-            cfg.IPType = src.IPType                                                                                                                                         
+            cfg.IPType = src.IPType                
+			cfg.BashHook = src.BashHook                                                                                                                         
             cfg.MaxRetries = src.MaxRetries                                                                                                                                 
             cfg.RetryInterval = src.RetryInterval                                                                                                                           
             cfg.DNSTimeout = src.DNSTimeout                                                                                                                                 

@@ -74,6 +74,7 @@ Example:
 			"certificate_expired_before",
 			"follow_redirects",
 			"ip_type",
+			"bash_hook",
 			"max_retries",
 			"retry_interval",
 			"dns_timeout",
@@ -96,6 +97,7 @@ Example:
 			cfg.CertificateExpiredBefore = src.CertificateExpiredBefore
 			cfg.FollowRedirects = src.FollowRedirects
 			cfg.IPType = src.IPType
+			cfg.BashHook = src.BashHook
 			cfg.MaxRetries = src.MaxRetries
 			cfg.RetryInterval = src.RetryInterval
 			cfg.DNSTimeout = src.DNSTimeout

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -83,4 +84,23 @@ func NormalizeURL(rawURL string) string {
 
 	// Reconstruct the URL
 	return parsedURL.String()
+}
+
+func CalculateMedian(value []int64) int64 {
+	if len(value) == 0 {
+		return 0
+	}
+
+	copied := make([]int64, len(value))
+	copy(copied, value)
+	sort.Slice(copied, func(i, j int) bool {
+		return copied[i] < copied[j]
+	})
+
+	n := len(copied)
+	if n%2 == 1 {
+		return copied[n/2]
+	}
+
+	return (copied[n/2-1] + copied[n/2]) / 2
 }

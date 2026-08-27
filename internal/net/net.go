@@ -43,6 +43,7 @@ type CheckResults struct {
 	ResponseTime   time.Duration
 	IsUp           bool
 	StatusCode     int
+	ContentSize	   int64
 	ErrorMessage   string
 	SSLExpiredDate *time.Time
 
@@ -209,8 +210,8 @@ func (nc *NetworkConfig) CheckWebsite() (*CheckResults, error) {
 	defer resp.Body.Close()
 
 	// Read at least some of the body to ensure the server is responsive
-	bodyBuf := make([]byte, 1024)
-	_, _ = io.ReadFull(resp.Body, bodyBuf)
+	body, _ := io.ReadAll(resp.Body)
+	result.ContentSize = int64(len(body))
 
 	// Treat redirects (3xx) as UP so 302 doesn't mark the monitor down.
 	success := resp.StatusCode >= 200 && resp.StatusCode < 400
