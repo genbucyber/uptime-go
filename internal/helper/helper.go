@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/net/html"
 )
 
 var durationRegex = regexp.MustCompile(`(\d+)([smhd])`)
@@ -103,4 +104,29 @@ func CalculateMedian(value []int64) int64 {
 	}
 
 	return (copied[n/2-1] + copied[n/2]) / 2
+}
+
+func ExtractVisibleText(body string) string {
+	doc, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		return strings.ToLower(body)
+	}
+	
+	var text strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style") {
+			return
+		}
+		if n.Type == html.TextNode {
+			text.WriteString(n.Data)
+			text.WriteString(" ")
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling{
+			walk(child)
+		}
+	}
+
+	walk(doc)
+	return strings.ToLower(text.String())
 }

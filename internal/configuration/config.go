@@ -21,14 +21,15 @@ const (
 )
 
 type MonitorConfig struct {
-	URL                      string `mapstructure:"url" yaml:"url" json:"url"`
-	Enabled                  bool   `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
-	Interval                 string `mapstructure:"interval" yaml:"interval" json:"interval"`
-	ResponseTimeThreshold    string `mapstructure:"response_time_threshold" yaml:"response_time_threshold" json:"response_time_threshold"`
-	CertificateMonitoring    bool   `mapstructure:"certificate_monitoring" yaml:"certificate_monitoring" json:"certificate_monitoring"`
-	CertificateExpiredBefore string `mapstructure:"certificate_expired_before" yaml:"certificate_expired_before" json:"certificate_expired_before"`
-	IPType                   string `mapstructure:"ip_type" yaml:"ip_type,omitempty" json:"ip_type,omitempty"`
-	BashHook                 string `mapstructure:"bash_hook" yaml:"bash_hook,omitempty" json:"bash_hook,omitempty"`
+	URL                      string 				 `mapstructure:"url" yaml:"url" json:"url"`
+	Enabled                  bool   				 `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
+	Interval                 string 				 `mapstructure:"interval" yaml:"interval" json:"interval"`
+	ResponseTimeThreshold    string 				 `mapstructure:"response_time_threshold" yaml:"response_time_threshold" json:"response_time_threshold"`
+	CertificateMonitoring    bool   				 `mapstructure:"certificate_monitoring" yaml:"certificate_monitoring" json:"certificate_monitoring"`
+	CertificateExpiredBefore string 				 `mapstructure:"certificate_expired_before" yaml:"certificate_expired_before" json:"certificate_expired_before"`
+	IPType                   string 				 `mapstructure:"ip_type" yaml:"ip_type,omitempty" json:"ip_type,omitempty"`
+	BashHook                 string 				 `mapstructure:"bash_hook" yaml:"bash_hook,omitempty" json:"bash_hook,omitempty"`
+    ContentValidation        ContentValidationConfig `mapstructure:"content_validation" yaml:"content_validation,omitempty" json:"content_validation,omitempty"`  
 
 	// Retry configuration
 	MaxRetries    int    `mapstructure:"max_retries" yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
@@ -40,6 +41,12 @@ type MonitorConfig struct {
 	TLSHandshakeTimeout   string `mapstructure:"tls_handshake_timeout" yaml:"tls_handshake_timeout,omitempty" json:"tls_handshake_timeout,omitempty"`
 	ResponseHeaderTimeout string `mapstructure:"response_header_timeout" yaml:"response_header_timeout,omitempty" json:"response_header_timeout,omitempty"`
 	FollowRedirects       *bool  `mapstructure:"follow_redirects" yaml:"follow_redirects" json:"follow_redirects"`
+}
+
+type ContentValidationConfig struct {
+    Enabled        bool     `mapstructure:"enabled" yaml:"enabled" json:"enabled"`                                                                                   
+    RequiredWords  []string `mapstructure:"required_words" yaml:"required_words" json:"required_words"`                                                              
+    ForbiddenWords []string `mapstructure:"forbidden_words" yaml:"forbidden_words" json:"forbidden_words"`  
 }
 
 type AppConfig struct {
@@ -166,6 +173,9 @@ func Load(configPath string) error {
 			FollowRedirects:          followRedirects,
 			IPType:                   ipType,
 			BashHook: 				  monitor.BashHook,
+			ContentValidationEnabled: monitor.ContentValidation.Enabled,
+			RequiredWords: 			  monitor.ContentValidation.RequiredWords,
+			ForbiddenWords: 		  monitor.ContentValidation.ForbiddenWords,
 			MaxRetries:               maxRetries,
 			RetryInterval:            retryInterval,
 			DNSTimeout:               dnsTimeout,
@@ -259,6 +269,9 @@ func SyncMonitorsWithDB(db *database.Database, configs []*models.Monitor) ([]*mo
             "follow_redirects",                                                                                                                                             
             "ip_type",           
 			"bash_hook",
+			"content_validation_enabled",
+			"required_words",
+			"forbidden_words",
             "max_retries",                                                                                                                                                  
             "retry_interval",                                                                                                                                               
             "dns_timeout",                                                                                                                                                  
@@ -290,7 +303,10 @@ func SyncMonitorsWithDB(db *database.Database, configs []*models.Monitor) ([]*mo
             cfg.CertificateExpiredBefore = src.CertificateExpiredBefore                                                                                                     
             cfg.FollowRedirects = src.FollowRedirects                                                                                                                       
             cfg.IPType = src.IPType                
-			cfg.BashHook = src.BashHook                                                                                                                         
+			cfg.BashHook = src.BashHook     
+			cfg.ContentValidationEnabled = src.ContentValidationEnabled
+			cfg.RequiredWords = src.RequiredWords
+			cfg.ForbiddenWords = src.ForbiddenWords                                                                                                                    
             cfg.MaxRetries = src.MaxRetries                                                                                                                                 
             cfg.RetryInterval = src.RetryInterval                                                                                                                           
             cfg.DNSTimeout = src.DNSTimeout                                                                                                                                 

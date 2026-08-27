@@ -30,6 +30,10 @@ type Monitor struct {
 	Histories                []MonitorHistory `json:"histories,omitempty" gorm:"foreignKey:MonitorID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 	Incidents                []Incident       `json:"-" gorm:"foreignKey:MonitorID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 
+	ContentValidationEnabled bool			  `json:"content_validation_enable" gorm:"default:false"`
+	RequiredWords			 []string		  `json:"required_words,omitempty" gorm:"serializer:json"`
+	ForbiddenWords			 []string		  `json:"forbidden_words,omitempty" gorm:"serializer:json"`
+
 	// Retry configuration
 	MaxRetries    int           `json:"-" gorm:"default:3"`
 	RetryInterval time.Duration `json:"-" gorm:"default:60000000000"` // 60s in nanoseconds
