@@ -29,9 +29,18 @@ const (
 	UnexpectedStatusCode Type = "unexpected_status_code"
 	SSLExpired           Type = "certificate_expired"
 	Timeout              Type = "timeout"
+	ContentSize			 Type = "content_size"
+	WordDetector		 Type = "word_detector"
 )
 
 const (
 	EventWebsiteDown               string = "website_down"
 	EventWebsiteCertificateExpired string = "website_certificate_expired"
+)
+
+const (
+	MinSampleSizeForAnomal		= 5
+	RollingSampeLimit			= 20
+	MinAbsoluteChangeBytes		= 50 * 1024
+	MinPercentageChange			= 0.70
 )
