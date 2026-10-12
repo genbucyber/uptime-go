@@ -3,6 +3,8 @@
 # max_retries: number of retry attempts before marking as DOWN (default: 3)
 # Granular timeouts: dns_timeout, dial_timeout, tls_handshake_timeout, response_header_timeout
 # ip_type: ipv4, ipv6, or both (default: ipv4)
+# bash_hook: shell command run when the SSL certificate is expiring/expired (e.g. certbot renew).
+#   Exit 0 + renewed cert = no notification. Hook failure or unchanged cert = notification with hook_output/hook_error.
 # follow_redirects: follow HTTP redirects (default: true)
 
 monitor:
@@ -12,6 +14,7 @@ monitor:
     response_time_threshold: 30s
     certificate_monitoring: true
     certificate_expired_before: 31d
+    bash_hook: 'certbot renew --quiet'  # optional
     follow_redirects: true
     ip_type: ipv4
     

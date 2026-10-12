@@ -7,6 +7,7 @@ A distributed uptime monitoring tool written in Go that checks website availabil
 - Response time tracking
 - Custom check intervals
 - Historical data storage
+- SSL expiry monitoring with an optional auto-renew hook
 
 ## Installation
 ```bash
@@ -23,7 +24,13 @@ monitor:
     interval: 5m
     response_time_threshold: 5s
     ip_type: ipv4
+    certificate_monitoring: true
+    certificate_expired_before: 31d
+    bash_hook: 'certbot renew --quiet'  # optional
 ```
+
+### SSL expiry hook
+When the certificate has `certificate_expired_before` or less remaining (or is already expired), `bash_hook` runs once per incident. If it exits 0 and the re-checked certificate is renewed, no notification is sent. Otherwise the notification is sent with `hook_output` and `hook_error`.
 
 ## Usage
 Run the application:
