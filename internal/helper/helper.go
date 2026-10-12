@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/net/html"
 )
 
 var durationRegex = regexp.MustCompile(`(\d+)([smhd])`)
@@ -83,4 +85,48 @@ func NormalizeURL(rawURL string) string {
 
 	// Reconstruct the URL
 	return parsedURL.String()
+}
+
+func CalculateMedian(value []int64) int64 {
+	if len(value) == 0 {
+		return 0
+	}
+
+	copied := make([]int64, len(value))
+	copy(copied, value)
+	sort.Slice(copied, func(i, j int) bool {
+		return copied[i] < copied[j]
+	})
+
+	n := len(copied)
+	if n%2 == 1 {
+		return copied[n/2]
+	}
+
+	return (copied[n/2-1] + copied[n/2]) / 2
+}
+
+func ExtractVisibleText(body string) string {
+	doc, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		return strings.ToLower(body)
+	}
+	
+	var text strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style") {
+			return
+		}
+		if n.Type == html.TextNode {
+			text.WriteString(n.Data)
+			text.WriteString(" ")
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling{
+			walk(child)
+		}
+	}
+
+	walk(doc)
+	return strings.ToLower(text.String())
 }

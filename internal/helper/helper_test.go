@@ -30,3 +30,28 @@ func TestParseDurationDefault(t *testing.T) {
 
 	assert.Equal(t, result, time.Duration(19)*time.Second)
 }
+
+func TestCalculateMedian(t *testing.T) {
+	resSize := []int64{120, 109, 106, 90, 102, 104, 124, 119, 108}
+	result := CalculateMedian(resSize)
+
+	assert.Equal(t, result, int64(108))
+}
+
+func TestExtractVisibleText(t *testing.T){
+	htmlContent := `
+		<html>
+			<body>
+				<!-- login page --!>
+				<h1>Welcome to Dashboard</h1>
+				<a href="#">Login</a>
+				<script>console.log("400 Bad Request")</script>
+			</body>
+		</html>
+	`
+	visible := ExtractVisibleText(htmlContent)
+	assert.Contains(t, visible, "welcome to dashboard")
+	assert.Contains(t, visible, "login")
+	assert.NotContains(t, visible, "400 Bad Request")
+	assert.NotContains(t, visible, "login page")
+}

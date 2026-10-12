@@ -18,6 +18,7 @@ type Monitor struct {
 	CertificateExpiredBefore *time.Duration   `json:"-"`
 	FollowRedirects          bool             `json:"-"`
 	IPType                   string           `json:"-"`
+	BashHook				 string			  `json:"bash_hook,omitempty"`
 	IsUp                     *bool            `json:"is_up"`
 	StatusCode               *int             `json:"status_code"`
 	ResponseTime             *int64           `json:"response_time"` // in milliseconds
@@ -28,6 +29,10 @@ type Monitor struct {
 	UpdatedAt                time.Time        `json:"last_check"`
 	Histories                []MonitorHistory `json:"histories,omitempty" gorm:"foreignKey:MonitorID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 	Incidents                []Incident       `json:"-" gorm:"foreignKey:MonitorID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+
+	ContentValidationEnabled bool			  `json:"content_validation_enable" gorm:"default:false"`
+	RequiredWords			 []string		  `json:"required_words,omitempty" gorm:"serializer:json"`
+	ForbiddenWords			 []string		  `json:"forbidden_words,omitempty" gorm:"serializer:json"`
 
 	// Retry configuration
 	MaxRetries    int           `json:"-" gorm:"default:3"`
@@ -45,8 +50,9 @@ type MonitorHistory struct {
 	ID           string    `json:"-" gorm:"primaryKey"`
 	MonitorID    string    `json:"-" gorm:"index"`
 	IsUp         bool      `json:"is_up" gorm:"index"`
-	StatusCode   int       `json:"-"`
+	StatusCode   int       `json:"status_code"`
 	ResponseTime int64     `json:"response_time"` // in milliseconds
+	ContentSize	 int64	   `json:"content_size"`
 	CreatedAt    time.Time `json:"created_at" gorm:"index"`
 	Monitor      Monitor   `json:"-" gorm:"foreignKey:MonitorID"`
 }
@@ -60,6 +66,12 @@ type Incident struct {
 	CreatedAt   time.Time     `json:"created_at"`
 	SolvedAt    *time.Time    `json:"solved_at" gorm:"index"`
 	Monitor     Monitor       `gorm:"foreignKey:MonitorID"`
+}
+
+type DailyStat struct{
+	Date 		string
+	TotalChecks int
+	UpChecks 	int
 }
 
 func (h *MonitorHistory) BeforeCreate(tx *gorm.DB) (err error) {

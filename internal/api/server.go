@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+	"uptime-go/internal/monitor"
 	"uptime-go/internal/net/database"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,7 @@ type Server struct {
 	router     *gin.Engine
 	server     *http.Server
 	configPath string
+	monitor	   *monitor.UptimeMonitor
 }
 
 type ServerConfig struct {
@@ -24,7 +26,7 @@ type ServerConfig struct {
 	ConfigPath string
 }
 
-func NewServer(cfg ServerConfig, db *database.Database) *Server {
+func NewServer(cfg ServerConfig, db *database.Database, mon *monitor.UptimeMonitor) *Server {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(accessLogger())
@@ -33,6 +35,7 @@ func NewServer(cfg ServerConfig, db *database.Database) *Server {
 		db:         db,
 		router:     router,
 		configPath: cfg.ConfigPath,
+		monitor: 	mon,
 		server: &http.Server{
 			Addr:         fmt.Sprintf("%s:%s", cfg.Bind, cfg.Port),
 			Handler:      router.Handler(),
@@ -75,6 +78,7 @@ func (s *Server) setupRoutes() {
 
 	api := s.router.Group("/api/uptime-go")
 	api.POST("/config", s.UpdateConfigHandler)
+	api.POST("/config/reload", s.ReloadConfigHanlder)
 
 	reportGroup := api.Group("/reports")
 	reportGroup.GET("/", s.GetMonitoringReport)

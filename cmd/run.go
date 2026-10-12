@@ -33,7 +33,13 @@ It loads websites from the configuration and continuously checks their uptime.
 Use this command to start the monitoring service.
 Example:
   uptime-go run --config /path/to/your/config.yml`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if err := configuration.Load(configPath); err != nil {
+			return err
+		}
+		return nil
+	},
+ 	 RunE: func(cmd *cobra.Command, args []string) error {
 		// Monitoring Section
 		configs := configuration.Config.Monitor
 
@@ -68,6 +74,10 @@ Example:
 			"certificate_expired_before",
 			"follow_redirects",
 			"ip_type",
+			"bash_hook",
+			"content_validation_enabled",
+			"required_words", 
+			"forbidden_words",
 			"max_retries",
 			"retry_interval",
 			"dns_timeout",
@@ -90,6 +100,10 @@ Example:
 			cfg.CertificateExpiredBefore = src.CertificateExpiredBefore
 			cfg.FollowRedirects = src.FollowRedirects
 			cfg.IPType = src.IPType
+			cfg.BashHook = src.BashHook
+			cfg.ContentValidationEnabled = src.ContentValidationEnabled
+			cfg.RequiredWords = src.RequiredWords
+			cfg.ForbiddenWords = src.ForbiddenWords
 			cfg.MaxRetries = src.MaxRetries
 			cfg.RetryInterval = src.RetryInterval
 			cfg.DNSTimeout = src.DNSTimeout
@@ -128,7 +142,7 @@ Example:
 				Bind:       apiBind,
 				Port:       apiPort,
 				ConfigPath: configPath,
-			}, db)
+			}, db, uptimeMonitor)
 
 			go func() {
 				if err := apiServer.Start(); err != nil {
